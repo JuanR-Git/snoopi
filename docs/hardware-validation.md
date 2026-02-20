@@ -1,7 +1,7 @@
 # Hardware Validation — Milestone 0 Findings
 
 **Date:** February 20, 2026
-**Status:** LiDAR CONFIRMED — RPi5 16GB ORDERED (resolves RAM warning)
+**Status:** ALL BLOCKERS RESOLVED — READY FOR MILESTONE 1
 
 ---
 
@@ -135,16 +135,18 @@ The Air's Allwinner MR813 is a very low-power embedded chip — it runs Unitree'
 
 ---
 
-## 4. Firmware
+## 4. Firmware — CONFIRMED COMPATIBLE
 
 | Item | Detail |
 |---|---|
+| Hardware version | **V2.0** |
+| Software/firmware version | **V1.1.7** |
 | SDK tested firmware | v1.1.7 |
-| Air model firmware observed | v1.1.2 (from forum reports) |
-| How to check | Via Unitree app (connect to robot's WiFi AP, open app) |
-| Firmware update tool | [go2_firmware_tools](https://github.com/legion1581/go2_firmware_tools) (community) |
+| Compatibility | **EXACT MATCH** — go2_ros2_sdk targets v1.1.7 |
 
-**Action required:** Check current firmware version on the Go2 Air via the Unitree app. If firmware is older than v1.1.7, a firmware update may be needed for full SDK compatibility.
+**DO NOT update firmware** via the Unitree app — newer versions could break SDK compatibility.
+
+Known v1.1.7 limitation: joint states arrive at 1 Hz (URDF visualization lag). This is cosmetic and does not affect navigation or control.
 
 ---
 
@@ -201,14 +203,21 @@ If the Go2 Air does not have LiDAR, these are the options ranked by recommendati
 
 ---
 
-## 7. Recommended Next Steps
+## 7. Milestone 0 Conclusion
 
-1. **IMMEDIATE:** Check if your Go2 Air has the 4D LiDAR L1 mounted (look for a sensor dome on top of the robot head)
-2. **IMMEDIATE:** Power on the Go2 Air, connect via Unitree app, check firmware version
-3. **IF NO LIDAR:** Purchase an external LiDAR (RPLiDAR A1 or YDLIDAR X4 recommended)
-4. **IF LIDAR PRESENT:** Proceed to Milestone 1 (environment setup)
-5. Consider budgeting for RPi4 4GB upgrade (~$55) if 2GB proves insufficient during testing
-6. **DO NOT update firmware** via the Unitree app until SDK compatibility is verified for that version
+All validation checks passed. No blockers remain.
+
+| Check | Result |
+|---|---|
+| LiDAR present | YES — super-wide-angle 3D LiDAR |
+| Firmware compatible | YES — V1.1.7 (exact SDK target) |
+| go2_ros2_sdk supports Air | YES — Humble, Iron, Rolling |
+| Companion computer | RPi5 16GB ordered (resolves RPi4 2GB limitation) |
+| SSH access needed | NO — SDK connects externally via WebRTC/CycloneDDS |
+
+**Proceed to Milestone 1 — Environment Setup.**
+
+**Reminder:** DO NOT update the Go2 firmware via the Unitree app. V1.1.7 is the confirmed compatible version.
 
 ---
 
