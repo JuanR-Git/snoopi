@@ -1,3 +1,6 @@
+# TODO: pin this to a digest after first successful build on the Pi.
+# Run: docker inspect --format='{{index .RepoDigests 0}}' osrf/ros:humble-ros-base
+# Then replace with: FROM osrf/ros:humble-ros-base@sha256:<digest>
 FROM osrf/ros:humble-ros-base
 
 # Suppress interactive prompts during apt installs
@@ -61,6 +64,9 @@ RUN chmod +x /entrypoint.sh
 # Set ROS middleware to CycloneDDS
 # CYCLONEDDS_URI points to the config file (volume-mounted at runtime)
 ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+# CYCLONEDDS_URI: volume-mounted at runtime via docker-compose.
+# Running this image directly with docker run (without the volume) will cause
+# CycloneDDS to use defaults rather than this config — use docker-compose instead.
 ENV CYCLONEDDS_URI=/ros2_ws/cyclonedds.xml
 
 WORKDIR /ros2_ws
