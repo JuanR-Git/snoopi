@@ -1,0 +1,22 @@
+services:
+  snoopi-ros2:
+    build: .
+    image: snoopi-ros2:latest
+    container_name: snoopi-ros2
+    # host networking: container shares the Pi's network stack directly.
+    # Required for CycloneDDS multicast discovery to work.
+    network_mode: host
+    # unless-stopped: restart on reboot/crash, but NOT after manual docker stop
+    restart: unless-stopped
+    environment:
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+      - CYCLONEDDS_URI=/ros2_ws/cyclonedds.xml
+    volumes:
+      # Your ROS2 node source code — edit on host, build inside container
+      - ./src:/ros2_ws/src
+      # DDS config — edit without rebuilding the image
+      - ./docker/cyclonedds.xml:/ros2_ws/cyclonedds.xml:ro
+    # Keep stdin/tty open so docker exec works cleanly
+    stdin_open: true
+    tty: true
