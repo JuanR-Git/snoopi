@@ -26,6 +26,27 @@ See `docs/project.md` → Section 8, Milestone 1 for full task list.
   - DO NOT update robot firmware — V1.1.7 is the confirmed compatible version
   - Full findings: `docs/hardware-validation.md`
 
+## Session Handoff (2026-02-25)
+Active branch: `feature/docker-environment-setup`
+Active plan: `docs/plans/2026-02-25-docker-environment-setup.md`
+Execution approach: subagent-driven development (Tasks 1 complete, Task 2 in progress on Pi)
+
+**Task 2 status:** User is running `docker compose build` on the Pi. When done,
+`docker images | grep snoopi` should show `snoopi-ros2 latest`. Report that output to proceed to Task 3.
+
+**Dev workflow:**
+- File edits happen on Windows in the worktree at `.worktrees/feature-docker-setup/`
+- Sync: `[WINDOWS] git push` → `[PI] git pull`
+- Labels: `[WINDOWS]`, `[PI]`, `[PI - container]` (after docker exec), `[BROWSER]`
+- Git remote: https://github.com/JuanR-Git/snoopi.git
+
+**RPi5 is on Ubuntu Server 24.04** (not 22.04) — ROS2 runs inside Docker container.
+All Docker concepts should be explained in detail (user is new to Docker).
+
+Delete this section once picked up on desktop.
+
+---
+
 ## Tech Stack
 - ROS2 Humble on Ubuntu 22.04
 - go2_ros2_sdk (hardware bridge)
