@@ -1,0 +1,21 @@
+# Worktrees
+.worktrees/
+
+# Python
+backend/venv/
+backend/__pycache__/
+backend/.env
+**/__pycache__/
+*.pyc
+
+# Node
+ui/node_modules/
+ui/dist/
+
+# ROS2 build artifacts (live on the Pi, not in the repo)
+src/*/build/
+src/*/install/
+src/*/log/
+
+# Environment
+.env
