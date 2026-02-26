@@ -4,18 +4,28 @@
 Hospital robot application on Unitree Go2 Air. See `docs/project.md` for full project plan.
 
 ## Current Milestone
-Milestone 1 — Environment Setup
-See `docs/project.md` → Section 8, Milestone 1 for full task list.
+Milestone 2 — Hardware Connection & Telemetry
+See `docs/project.md` → Section 8, Milestone 2 for full task list.
 
 ## Active Tasks
-- [ ] Install Ubuntu 22.04 on development machine (if not already installed)
-- [ ] Install ROS2 Humble (full desktop install)
-- [ ] Install Nav2, SLAM Toolbox, rosbridge_suite
-- [ ] Clone and build go2_ros2_sdk
-- [ ] Install and configure CycloneDDS
-- [ ] Verify installation (ros2 topic list works)
+- [ ] Connect dev laptop / RPi5 to Go2 Air over Ethernet
+- [ ] Configure network interface (static IP on the robot's subnet)
+- [ ] Launch go2_ros2_sdk bridge nodes
+- [ ] Run `ros2 topic list` — document all available topics from the robot
+- [ ] Subscribe to and verify each relevant topic (battery, temp, joints, IMU, LiDAR)
+- [ ] Write a simple Python ROS2 node (health_printer.py) that prints health data
+- [ ] Document which topics are available vs. expected but missing
 
 ## Completed Milestones
+- **Milestone 1 — Environment Setup** (Feb 25, 2026)
+  - ROS2 Humble running in Docker on RPi5 (ros:humble-ros-base-jammy)
+  - RPi5 host OS: Ubuntu Server 24.04, Docker containers run Ubuntu 22.04
+  - Nav2 (30 packages), SLAM Toolbox, rosbridge suite all installed and verified
+  - go2_ros2_sdk built (go2_interfaces + go2_robot_sdk); skipped lidar_processor_cpp (needs pcl_ros) and coco_detector (needs torch)
+  - CycloneDDS configured as ROS middleware
+  - Curated ARM64 pip deps: excluded open3d (no aarch64 wheel), torch/torchvision (not MVP)
+  - Docker image uses host networking for DDS multicast discovery
+  - Verification: `ros2 topic list`, all package checks passed
 - **Milestone 0 — Validation & Discovery** (Feb 20, 2026)
   - Go2 Air firmware V1.1.7 — exact match for go2_ros2_sdk
   - Hardware version V2.0 — no compatibility concerns
@@ -27,7 +37,8 @@ See `docs/project.md` → Section 8, Milestone 1 for full task list.
   - Full findings: `docs/hardware-validation.md`
 
 ## Tech Stack
-- ROS2 Humble on Ubuntu 22.04
+- ROS2 Humble on Ubuntu 22.04 (via Docker on RPi5)
+- Docker (ros:humble-ros-base-jammy) — containerized ROS2 environment
 - go2_ros2_sdk (hardware bridge)
 - Nav2 (navigation) + SLAM Toolbox (mapping)
 - FastAPI + React (UI)
@@ -48,12 +59,19 @@ See `docs/project.md` → Section 8, Milestone 1 for full task list.
 ## Hardware
 - **Robot:** Unitree Go2 Air (HW V2.0, FW V1.1.7)
 - **Sensors:** Super-wide-angle 3D LiDAR, front camera, ultrasonic, IMU, foot force sensors
-- **Companion computer:** Raspberry Pi 5 16GB (ordered) — RPi4 2GB as backup
+- **Companion computer:** Raspberry Pi 5 16GB — running Ubuntu Server 24.04, ROS2 via Docker
 - **Dev machine:** Linux (Ubuntu 22.04)
 
 ## Project Structure
 ```
 ├── CLAUDE.md              # This file — active instructions
+├── Dockerfile             # ROS2 Humble environment (ARM64-compatible)
+├── docker-compose.yml     # Container orchestration (host networking for DDS)
+├── .env.example           # Environment template (ROS_DOMAIN_ID)
+├── docker/
+│   ├── entrypoint.sh      # Sources ROS2 base, SDK, and user workspaces
+│   ├── cyclonedds.xml     # DDS middleware config (interface, discovery)
+│   └── requirements-arm64.txt  # Curated pip deps (excludes open3d, torch)
 ├── docs/
 │   ├── project.md         # Full project plan (v2)
 │   └── hardware-validation.md  # Milestone 0 findings
