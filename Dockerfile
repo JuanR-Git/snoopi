@@ -59,12 +59,17 @@ RUN pip3 install --no-cache-dir -r /tmp/requirements-arm64.txt \
     && rm /tmp/requirements-arm64.txt
 
 # Layer 5: build the SDK workspace with colcon
-# Python-only package — takes under 1 minute on RPi5.
 # --symlink-install: allows source edits without rebuild (dev convenience)
 # CMAKE_BUILD_TYPE=Release: strips debug symbols, reduces image size
+# --packages-skip: exclude packages not needed for MVP:
+#   lidar_processor_cpp — requires pcl_ros; the SDK already publishes
+#     LaserScan directly, which Nav2/SLAM Toolbox consume as-is
+#   coco_detector — requires torch (excluded from ARM64 pip deps);
+#     object detection is not in MVP scope
 RUN /bin/bash -c "source /opt/ros/humble/setup.bash && \
     colcon build \
     --symlink-install \
+    --packages-skip lidar_processor_cpp coco_detector \
     --cmake-args -DCMAKE_BUILD_TYPE=Release"
 
 # Create the user workspace mount point
