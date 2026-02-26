@@ -80,6 +80,10 @@ RUN mkdir -p /ros2_ws/src
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
+# Source ROS2 workspaces in .bashrc so interactive shells (docker exec)
+# have ros2 commands available without manually sourcing
+RUN echo "source /entrypoint.sh" >> /root/.bashrc
+
 # Set CycloneDDS as the ROS2 middleware (required by go2_ros2_sdk)
 ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 # CYCLONEDDS_URI: points to the DDS config file, volume-mounted at runtime
