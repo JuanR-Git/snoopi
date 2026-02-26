@@ -1,26 +1,34 @@
-# TODO: pin this to a digest after first successful build on the Pi.
-# Run: docker inspect --format='{{index .RepoDigests 0}}' osrf/ros:humble-ros-base
-# Then replace with: FROM osrf/ros:humble-ros-base@sha256:<digest>
-FROM osrf/ros:humble-ros-base
+# Base image: official ROS2 Humble on Ubuntu 22.04 (Jammy)
+# Multi-arch manifest — Docker auto-pulls linux/arm64 on RPi5.
+# After first successful build, pin to a digest for reproducibility:
+#   docker inspect --format='{{index .RepoDigests 0}}' ros:humble-ros-base-jammy
+#   Then: FROM ros:humble-ros-base-jammy@sha256:<digest>
+FROM ros:humble-ros-base-jammy
 
 # Suppress interactive prompts during apt installs
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Layer: system build tools and utilities
-RUN apt-get update && apt-get install -y \
-    clang \
-    portaudio19-dev \
+# Layer 1: system tools not included in ros-base
+# ros:humble-ros-base-jammy already provides: build-essential, git, curl,
+# python3-colcon-common-extensions, python3-rosdep, python3-vcstool
+RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
-    python3-colcon-common-extensions \
-    python3-rosdep \
-    git \
-    curl \
-    wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Layer: ROS2 packages
-# Each package installs into /opt/ros/humble/ alongside the base install
-RUN apt-get update && apt-get install -y \
+# Layer 2: ROS2 binary packages (pre-compiled for arm64 from packages.ros.org)
+# These install into /opt/ros/humble/ alongside the base install.
+# - navigation2 + nav2-bringup: autonomous navigation stack (path planning,
+#   costmaps, obstacle avoidance, AMCL localization)
+# - slam-toolbox: generates 2D occupancy grid maps from LiDAR during
+#   teleoperation mapping phase (Milestone 4)
+# - rosbridge-suite: WebSocket bridge between ROS2 and the React/FastAPI UI
+# - rmw-cyclonedds-cpp: DDS middleware required by go2_ros2_sdk for
+#   communicating with the Go2 Air over Ethernet
+# - vision-msgs, image-tools: required dependencies of go2_ros2_sdk
+# - teleop-twist-keyboard: manual robot driving for SLAM mapping
+# - xacro, robot-state-publisher, joint-state-publisher: robot model (URDF)
+#   publishing, needed by Nav2 for footprint and tf transforms
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-navigation2 \
     ros-humble-nav2-bringup \
     ros-humble-slam-toolbox \
@@ -34,43 +42,47 @@ RUN apt-get update && apt-get install -y \
     ros-humble-joint-state-publisher \
     && rm -rf /var/lib/apt/lists/*
 
-# Layer: clone go2_ros2_sdk into its own workspace at /opt/go2_ws/
-# This workspace is separate from /ros2_ws/ (your nodes) so the SDK
-# is pre-compiled in the image and never rebuilt during development.
+# Layer 3: clone go2_ros2_sdk into a dedicated workspace at /opt/go2_ws/
+# Separate from /ros2_ws/ (your custom nodes) so the SDK is baked into the
+# image once and never rebuilt during day-to-day development.
 WORKDIR /opt/go2_ws
 RUN mkdir src && \
     git clone https://github.com/abizovnuralem/go2_ros2_sdk.git src/go2_ros2_sdk
 
-# Layer: SDK Python dependencies (WebRTC, async libs, etc.)
-RUN pip3 install --no-cache-dir \
-    -r /opt/go2_ws/src/go2_ros2_sdk/requirements.txt
+# Layer 4: SDK Python dependencies (WebRTC, MQTT, crypto, etc.)
+# Uses our curated ARM64-compatible list instead of the SDK's full
+# requirements.txt, which includes open3d (no arm64 wheel) and
+# torch/torchvision (not needed for MVP). See docker/requirements-arm64.txt
+# for the full exclusion rationale.
+COPY docker/requirements-arm64.txt /tmp/requirements-arm64.txt
+RUN pip3 install --no-cache-dir -r /tmp/requirements-arm64.txt \
+    && rm /tmp/requirements-arm64.txt
 
-# Layer: build the SDK workspace with colcon
-# This is the slow step (~15-25 min on ARM64 first time).
-# source the ROS2 base first so colcon knows about ROS2 message types.
+# Layer 5: build the SDK workspace with colcon
+# Python-only package — takes under 1 minute on RPi5.
+# --symlink-install: allows source edits without rebuild (dev convenience)
+# CMAKE_BUILD_TYPE=Release: strips debug symbols, reduces image size
 RUN /bin/bash -c "source /opt/ros/humble/setup.bash && \
     colcon build \
     --symlink-install \
     --cmake-args -DCMAKE_BUILD_TYPE=Release"
 
 # Create the user workspace mount point
-# ./src on the host is mounted here at runtime via docker-compose volumes
+# ./src on the host is volume-mounted here at runtime via docker-compose
 RUN mkdir -p /ros2_ws/src
 
-# Copy entrypoint script
+# Copy entrypoint script (sources ROS2 base, SDK, and user workspaces)
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Set ROS middleware to CycloneDDS
-# CYCLONEDDS_URI points to the config file (volume-mounted at runtime)
+# Set CycloneDDS as the ROS2 middleware (required by go2_ros2_sdk)
 ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-# CYCLONEDDS_URI: volume-mounted at runtime via docker-compose.
-# Running this image directly with docker run (without the volume) will cause
-# CycloneDDS to use defaults rather than this config — use docker-compose instead.
+# CYCLONEDDS_URI: points to the DDS config file, volume-mounted at runtime
+# via docker-compose. Without the volume, CycloneDDS falls back to defaults.
 ENV CYCLONEDDS_URI=/ros2_ws/cyclonedds.xml
 
 WORKDIR /ros2_ws
 
 ENTRYPOINT ["/entrypoint.sh"]
-# Default: keep container alive so you can docker exec into it
+# Default: keep container alive for interactive use via docker exec
 CMD ["tail", "-f", "/dev/null"]
