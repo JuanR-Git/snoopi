@@ -55,6 +55,7 @@ See `docs/project.md` → Section 8, Milestone 2 for full task list.
 - Max robot speed: 0.5 m/s
 - All safety-critical nodes must run on companion computer (RPi5), not over WiFi
 - DO NOT update Go2 Air firmware — V1.1.7 is confirmed compatible
+- Do NOT add Co-Authored-By lines to git commits
 
 ## Hardware
 - **Robot:** Unitree Go2 Air (HW V2.0, FW V1.1.7)
@@ -74,11 +75,20 @@ See `docs/project.md` → Section 8, Milestone 2 for full task list.
 │   └── requirements-arm64.txt  # Curated pip deps (excludes open3d, torch)
 ├── docs/
 │   ├── project.md         # Full project plan (v2)
-│   └── hardware-validation.md  # Milestone 0 findings
+│   ├── hardware-validation.md  # Milestone 0 findings
+│   └── raspberry-pi-checklist.md  # Pi setup progress (update every session)
 ├── src/                   # ROS2 packages (to be created)
 ├── ui/                    # React frontend (to be created)
 └── backend/               # FastAPI backend (to be created)
 ```
+
+## Raspberry Pi Checklist (MANDATORY)
+- **File:** `docs/raspberry-pi-checklist.md` — living document tracking all Pi setup progress
+- **Rule:** Every session that involves Pi-related work MUST update this checklist before ending
+- When a task is performed on the Pi and the user provides output, update the checklist status, date, and notes
+- When a design decision is made, add it to the Design Decisions Log table
+- Remind the user to commit and push the updated checklist at the end of each session
+- On session start, read this file to understand current Pi setup state
 
 ## Update Protocol
 When a milestone is completed:
