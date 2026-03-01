@@ -4,9 +4,11 @@ from contextlib import asynccontextmanager
 
 import websockets
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+from auth import authenticate, create_token, verify_token
 
 load_dotenv()
 
@@ -30,6 +32,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
 
 class TaskRequest(BaseModel):
@@ -57,6 +64,26 @@ async def _publish(topic: str, msg_type: str, data: dict) -> bool:
         return True
     except Exception:
         return False
+
+
+@app.post("/auth/login")
+async def login(req: LoginRequest):
+    user = authenticate(req.username, req.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    token = create_token(user["username"], user["display_name"])
+    return {"token": token, "user": user}
+
+
+@app.get("/auth/me")
+async def me(authorization: str = Header(default=None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid token")
+    token = authorization.removeprefix("Bearer ")
+    user = verify_token(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    return user
 
 
 @app.get("/health")
