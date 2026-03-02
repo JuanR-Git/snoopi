@@ -47,7 +47,7 @@ See `docs/project.md` → Section 8, Milestone 2 for full task list.
 
 ## Key Rules
 - Always read `docs/project.md` before making architectural decisions
-- MVP deadline: March 5, 2026
+- MVP deadline: March 12, 2026
 - MVP scope: health dashboard, task dispatch UI, Nav2 navigation, obstacle avoidance, e-stop
 - Robot-leads-patient model for MVP (walk-beside is post-MVP)
 - Teleoperation mapping for MVP (autonomous exploration is post-MVP)

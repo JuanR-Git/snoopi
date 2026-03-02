@@ -7,7 +7,7 @@
 
 A custom autonomous robot dog application for a hospital setting, built on the Unitree Go2 Air platform. The system allows operators (nurses at a station) to issue high-level task commands (e.g., "walk patient 200 meters") via a web-based dashboard. The robot executes tasks autonomously using onboard sensors, motor control, and real-time reactive logic. The dashboard provides task management, live health monitoring, and camera feeds.
 
-**MVP Demo Date:** March 5, 2026
+**MVP Demo Date:** March 12, 2026
 **Team:** Multiple humans and AI agents working in parallel
 
 ---
@@ -520,7 +520,7 @@ Since there is no physical e-stop button, the software e-stop must be robust and
 
 ---
 
-## 9. MVP Definition (March 5, 2026)
+## 9. MVP Definition (March 12, 2026)
 
 ### Must Have (Demo Blockers)
 - [x] Live health monitoring dashboard (battery, temperature, status)
@@ -582,7 +582,7 @@ Days 20-24: [All]        Milestone 9 — Integration & Demo Prep
 | Go2 Air LiDAR data not accessible via SDK | Low | Critical | LiDAR hardware confirmed present (super-wide-angle 3D LiDAR). Validate data access in Milestone 2. Fallback: external USB LiDAR on RPi4. |
 | Hospital WiFi blocks DDS multicast | Medium | Medium | Configure CycloneDDS with unicast peer list. Test in Milestone 3. |
 | Nav2 tuning takes longer than expected | Medium | Medium | Start with conservative parameters. Tuning is iterative — basic functionality should work with defaults. |
-| March 5th deadline is tight | High | High | Strict MVP scope. UI can be simplified. Demo in controlled corridor is acceptable. |
+| March 12th deadline is tight | High | High | Strict MVP scope. UI can be simplified. Demo in controlled corridor is acceptable. |
 
 ---
 
