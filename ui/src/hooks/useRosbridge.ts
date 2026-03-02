@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import ROSLIB from 'roslib'
+import * as ROSLIB from 'roslib'
 
 interface RosbridgeHook {
   connected: boolean
