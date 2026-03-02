@@ -6,9 +6,12 @@ import { RobotHealthCard } from '../components/RobotHealthCard'
 import { SystemHealthCard } from '../components/SystemHealthCard'
 import { TelemetryGraphs } from '../components/TelemetryGraphs'
 import { ControlsCard } from '../components/ControlsCard'
-import { AlertsPanel, Alert } from '../components/AlertsPanel'
-import { TaskHistory, TaskRecord } from '../components/TaskHistory'
-import { ROBOTS, RobotConfig, API } from '../config'
+import { AlertsPanel } from '../components/AlertsPanel'
+import type { Alert } from '../components/AlertsPanel'
+import { TaskHistory } from '../components/TaskHistory'
+import type { TaskRecord } from '../components/TaskHistory'
+import { ROBOTS, API } from '../config'
+import type { RobotConfig } from '../config'
 
 interface DashboardPageProps {
   user: { username: string; display_name: string }

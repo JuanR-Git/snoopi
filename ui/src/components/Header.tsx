@@ -1,4 +1,4 @@
-import { RobotConfig } from '../config'
+import type { RobotConfig } from '../config'
 
 interface HeaderProps {
   robots: RobotConfig[]
