@@ -8,13 +8,43 @@ Milestone 2 — Hardware Connection & Telemetry
 See `docs/project.md` → Section 8, Milestone 2 for full task list.
 
 ## Active Tasks
-- [ ] Connect dev laptop / RPi5 to Go2 Air over Ethernet
+- [ ] Test dashboard with rosbridge + mock publisher (verify graphs populate)
+- [ ] Connect RPi5 to Go2 Air over Ethernet in the lab
 - [ ] Configure network interface (static IP on the robot's subnet)
 - [ ] Launch go2_ros2_sdk bridge nodes
 - [ ] Run `ros2 topic list` — document all available topics from the robot
 - [ ] Subscribe to and verify each relevant topic (battery, temp, joints, IMU, LiDAR)
-- [ ] Write a simple Python ROS2 node (health_printer.py) that prints health data
-- [ ] Document which topics are available vs. expected but missing
+- [ ] Wire real robot topics into the dashboard (replace mock data)
+
+## Session Handoff (2026-03-03)
+Active branch: `feature/docker-environment-setup`
+
+**What's working:**
+- Docker container with ROS2 Humble, Nav2, rosbridge, go2_ros2_sdk — all verified on Pi
+- FastAPI backend with JWT auth (3 users), health/tasks/estop endpoints — 13 tests passing
+- React dashboard with login page, health cards, telemetry graphs, controls, alerts, task history
+- Full stack runs: backend (uvicorn:8000) + frontend (vite:5173), accessible from Windows browser
+
+**How to start the stack on Pi (3 terminals):**
+1. Backend: `cd ~/snoopi/backend && source venv/bin/activate && uvicorn main:app --host 0.0.0.0 --port 8000`
+2. Frontend: `cd ~/snoopi/ui && npm run dev -- --host 0.0.0.0`
+3. Docker (optional): `cd ~/snoopi && docker compose up -d && docker exec -it snoopi-ros2 bash`
+
+**Errors encountered & fixed (Mar 3):**
+- `externally-managed-environment` on pip install → use venv (`python3 -m venv venv`)
+- `verbatimModuleSyntax` import errors (blank page) → all type-only imports changed to `import type`
+- `.env` line break in `VITE_API_URL` → rewrote as single line
+- `ERR_CONNECTION_REFUSED` on login → frontend was hitting `localhost:8000` instead of Pi IP; fixed with `ui/.env`
+
+**Next steps:**
+1. Test with rosbridge running (start Docker container + rosbridge + mock publisher, verify graphs populate)
+2. Take Pi to lab, connect to Go2 Air via Ethernet, discover real robot topics
+3. Wire real topics into the dashboard
+
+**Pi IP:** 192.168.0.41
+**Login creds:** john/snoopi-john-2026, juan/snoopi-juan-2026, mihir/snoopi-mihir-2026
+
+Delete this section once picked up.
 
 ## Completed Milestones
 - **Milestone 1 — Environment Setup** (Feb 25, 2026)

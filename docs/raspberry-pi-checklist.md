@@ -38,30 +38,33 @@
 
 ---
 
-## 3. FastAPI Backend (Milestone 1 — Completed Feb 25)
+## 3. FastAPI Backend
 
 | Step | Status | Date | Notes |
 |------|--------|------|-------|
-| Python venv created at `~/snoopi/backend/` | DONE | Feb 25 | |
-| `pip install -r requirements.txt` | DONE | Feb 25 | |
-| `pytest tests/ -v` — all 7 tests pass | DONE | Feb 25 | health, tasks, estop endpoints |
+| Python venv created at `~/snoopi/backend/venv` | DONE | Feb 25 | Ubuntu 24.04 requires venv (PEP 668) |
+| `pip install -r requirements.txt` | DONE | Mar 3 | Includes bcrypt, python-jose for auth |
+| `pytest tests/ -v` — all 13 tests pass | DONE | Mar 3 | 7 original + 6 auth (login, me, token) |
+| JWT authentication endpoints working | DONE | Mar 3 | `/auth/login`, `/auth/me` |
+| 3 users configured (john, juan, mihir) | DONE | Mar 3 | bcrypt-hashed passwords in users.json |
 
 ---
 
-## 4. Node.js & React Frontend (Task 6 — In Progress)
+## 4. Node.js & React Frontend
 
 | Step | Status | Date | Notes |
 |------|--------|------|-------|
-| Node.js 20 LTS installed via NodeSource | UNKNOWN | | Was in progress when session crashed |
-| `node --version` shows v20.x | UNKNOWN | | **Verify next session** |
-| `npm --version` shows 10.x | UNKNOWN | | **Verify next session** |
-| `npm create vite@latest ui -- --template react-ts` | NOT DONE | | |
-| `npm install` in `ui/` | NOT DONE | | |
-| `npm install roslib` | NOT DONE | | |
-| `npm install --save-dev @types/roslib` | NOT DONE | | |
-| `npm run dev -- --host` starts dev server | NOT DONE | | |
-| React components created | NOT DONE | | Files to be written on Windows, pulled on Pi |
-| Frontend connects to rosbridge | NOT DONE | | |
+| Node.js installed (v24.14.0) | DONE | Mar 1 | Official nodejs.org install (not NodeSource) |
+| npm installed (v11.9.0) | DONE | Mar 1 | Came with Node.js |
+| Vite 7.3 + React 19 + TypeScript scaffolded | DONE | Mar 1 | `npm create vite@latest` on Pi |
+| Tailwind CSS v4 configured | DONE | Mar 1 | `@tailwindcss/vite` plugin |
+| Recharts installed | DONE | Mar 3 | For time-series telemetry graphs |
+| roslib installed | DONE | Mar 3 | `roslib` + `@types/roslib` |
+| `.env` configured with `VITE_API_URL` | DONE | Mar 3 | Points to `http://192.168.0.41:8000` |
+| Login page working | DONE | Mar 3 | JWT auth, 3 users |
+| Dashboard page loading | DONE | Mar 3 | All components render |
+| `npm run dev -- --host 0.0.0.0` serves app | DONE | Mar 3 | Accessible from Windows browser |
+| Frontend connects to rosbridge | NOT DONE | | Next step — needs rosbridge running |
 
 ---
 
@@ -90,6 +93,9 @@
 | Feb 25 | Excluded `open3d`, `torch`, `torchvision` from pip | No aarch64 wheels available |
 | Feb 25 | Node.js installed on Pi host, not in Docker | Frontend is a host-native app, no need for container |
 | Feb 25 | Pi commits `ui/` scaffold (exception to Windows-commits rule) | Vite CLI must run on Pi (ARM64), can't scaffold on Windows |
+| Mar 1 | Node.js v24.14.0 from nodejs.org (not apt/NodeSource) | Vite 7.x requires Node 20.19+ or 22.12+; apt only has v18 |
+| Mar 3 | `.env` file for Vite API URL | Browser runs on Windows, so `localhost:8000` doesn't work — must use Pi's LAN IP |
+| Mar 3 | `verbatimModuleSyntax: true` requires `import type` | Vite 7 / TS 5.8 default; all type-only imports must use `import type { X }` syntax |
 
 ---
 
