@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { DataPoint } from '../hooks/useTimeSeries'
+import type { DataPoint } from '../hooks/useTimeSeries'
 
 const RANGES = [
   { label: '5m', ms: 5 * 60 * 1000 },
