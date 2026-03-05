@@ -13,8 +13,8 @@ export function ControlsCard({ publish, rosConnected, token, onTaskCreated, user
   const [distance, setDistance] = useState('')
   const [sending, setSending] = useState(false)
 
-  const sit = () => publish('/snoopi/command', 'std_msgs/String', { data: 'sit' })
-  const stand = () => publish('/snoopi/command', 'std_msgs/String', { data: 'stand' })
+  const sit = () => publish('/snoopi/command', 'std_msgs/msg/String', { data: 'sit' })
+  const stand = () => publish('/snoopi/command', 'std_msgs/msg/String', { data: 'stand' })
 
   const sendTask = async () => {
     const d = parseFloat(distance)

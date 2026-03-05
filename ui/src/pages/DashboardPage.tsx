@@ -82,24 +82,29 @@ export function DashboardPage({ user, token, onLogout }: DashboardPageProps) {
   }, [cpuSeries, checkThreshold])
 
   // Pi health check polling
+  const prevPiConnectedRef = useRef(false)
   useEffect(() => {
     const check = async () => {
       try {
         const res = await fetch(`${API}/health`)
-        const wasConnected = piConnected
         const isConnected = res.ok
-        setPiConnected(isConnected)
-        if (wasConnected && !isConnected) {
+        if (prevPiConnectedRef.current && !isConnected) {
           addAlert('Pi connection lost', 'fatal')
         }
+        prevPiConnectedRef.current = isConnected
+        setPiConnected(isConnected)
       } catch {
+        if (prevPiConnectedRef.current) {
+          addAlert('Pi connection lost', 'fatal')
+        }
+        prevPiConnectedRef.current = false
         setPiConnected(false)
       }
     }
     check()
     const interval = setInterval(check, 5000)
     return () => clearInterval(interval)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [addAlert])
 
   // Task creation handler
   const onTaskCreated = useCallback((task: TaskRecord) => {

@@ -77,10 +77,14 @@ async def login(req: LoginRequest):
 
 @app.get("/auth/me")
 async def me(authorization: str = Header(default=None)):
+    return _require_auth(authorization)
+
+
+def _require_auth(authorization: str | None) -> dict:
+    """Verify Bearer token and return user dict, or raise 401."""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid token")
-    token = authorization.removeprefix("Bearer ")
-    user = verify_token(token)
+    user = verify_token(authorization.removeprefix("Bearer "))
     if not user:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
     return user
@@ -98,7 +102,8 @@ async def health():
 
 
 @app.post("/tasks", response_model=TaskResponse)
-async def create_task(req: TaskRequest):
+async def create_task(req: TaskRequest, authorization: str = Header(default=None)):
+    _require_auth(authorization)
     global _task_counter
     if req.type != "walk":
         raise HTTPException(status_code=400, detail="Only 'walk' tasks supported in MVP")
@@ -116,7 +121,7 @@ async def create_task(req: TaskRequest):
 
     await _publish(
         topic="/snoopi/task_command",
-        msg_type="std_msgs/String",
+        msg_type="std_msgs/msg/String",
         data={"data": json.dumps({"type": req.type, "distance_m": req.distance_m, "task_id": task_id})},
     )
     _tasks[task_id]["status"] = "dispatched"
@@ -131,11 +136,12 @@ async def get_task(task_id: str):
 
 
 @app.post("/estop")
-async def estop():
+async def estop(authorization: str = Header(default=None)):
     """Publish emergency stop command to ROS2 via rosbridge."""
+    _require_auth(authorization)
     ok = await _publish(
         topic="/snoopi/estop",
-        msg_type="std_msgs/Bool",
+        msg_type="std_msgs/msg/Bool",
         data={"data": True},
     )
     return {"status": "sent" if ok else "failed", "rosbridge_reachable": ok}
