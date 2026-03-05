@@ -24,17 +24,17 @@ export function SystemHealthCard({ subscribe, piConnected, onCpuUpdate }: Props)
   const [uwbPatient, setUwbPatient] = useState(false)
 
   useEffect(() => {
-    const unsubStats = subscribe<any>('/snoopi/system_stats', 'std_msgs/String', (msg: any) => {
+    const unsubStats = subscribe<any>('/snoopi/system_stats', 'std_msgs/msg/String', (msg: any) => {
       try {
         const data = JSON.parse(msg.data)
         setStats(data)
         onCpuUpdate?.(data.cpu_percent)
       } catch {}
     })
-    const unsubUwbBase = subscribe<any>('/snoopi/uwb_base_status', 'std_msgs/Bool', (msg: any) => {
+    const unsubUwbBase = subscribe<any>('/snoopi/uwb_base_status', 'std_msgs/msg/Bool', (msg: any) => {
       setUwbBase(msg.data)
     })
-    const unsubUwbPatient = subscribe<any>('/snoopi/uwb_patient_status', 'std_msgs/Bool', (msg: any) => {
+    const unsubUwbPatient = subscribe<any>('/snoopi/uwb_patient_status', 'std_msgs/msg/Bool', (msg: any) => {
       setUwbPatient(msg.data)
     })
     return () => { unsubStats(); unsubUwbBase(); unsubUwbPatient() }

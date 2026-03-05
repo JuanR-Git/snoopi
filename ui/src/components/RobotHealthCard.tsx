@@ -22,12 +22,12 @@ export function RobotHealthCard({ subscribe, onBatteryUpdate, onTempUpdate, onIm
   const [imu, setImu] = useState<Imu | null>(null)
 
   useEffect(() => {
-    const unsubBattery = subscribe<BatteryState>('/utlidar/battery', 'sensor_msgs/BatteryState', (msg) => {
+    const unsubBattery = subscribe<BatteryState>('/utlidar/battery', 'sensor_msgs/msg/BatteryState', (msg) => {
       setBattery(msg)
       onBatteryUpdate?.(msg.percentage * 100)
       onTempUpdate?.(msg.temperature)
     })
-    const unsubImu = subscribe<Imu>('/imu/data', 'sensor_msgs/Imu', (msg) => {
+    const unsubImu = subscribe<Imu>('/imu/data', 'sensor_msgs/msg/Imu', (msg) => {
       setImu(msg)
       onImuUpdate?.(msg.linear_acceleration.z)
     })
