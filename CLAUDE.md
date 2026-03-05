@@ -16,25 +16,24 @@ See `docs/project.md` → Section 8, Milestone 2 for full task list.
 - [ ] Subscribe to and verify each relevant topic (battery, temp, joints, IMU, LiDAR)
 - [ ] Wire real robot topics into the dashboard (replace mock data)
 
-## Session Handoff (2026-03-03)
+## Session Handoff (2026-03-05)
 Active branch: `feature/docker-environment-setup`
 
 **What's working:**
 - Docker container with ROS2 Humble, Nav2, rosbridge, go2_ros2_sdk — all verified on Pi
 - FastAPI backend with JWT auth (3 users), health/tasks/estop endpoints — 13 tests passing
-- React dashboard with login page, health cards, telemetry graphs, controls, alerts, task history
+- React dashboard with login page, health cards, Grafana-style telemetry graphs, controls, alerts, task history
+- Telemetry graphs: nice-number Y-axis, sliding clock-aligned X-axis, range-aware time format, no animation jank
 - Full stack runs: backend (uvicorn:8000) + frontend (vite:5173), accessible from Windows browser
 
 **How to start the stack on Pi (3 terminals):**
 1. Backend: `cd ~/snoopi/backend && source venv/bin/activate && uvicorn main:app --host 0.0.0.0 --port 8000`
-2. Frontend: `cd ~/snoopi/ui && npm run dev -- --host 0.0.0.0`
+2. Frontend: `cd ~/snoopi/ui && npm install && npm run dev -- --host 0.0.0.0`
 3. Docker (optional): `cd ~/snoopi && docker compose up -d && docker exec -it snoopi-ros2 bash`
 
-**Errors encountered & fixed (Mar 3):**
-- `externally-managed-environment` on pip install → use venv (`python3 -m venv venv`)
-- `verbatimModuleSyntax` import errors (blank page) → all type-only imports changed to `import type`
-- `.env` line break in `VITE_API_URL` → rewrote as single line
-- `ERR_CONNECTION_REFUSED` on login → frontend was hitting `localhost:8000` instead of Pi IP; fixed with `ui/.env`
+**Errors encountered & fixed (Mar 5):**
+- `recharts` imported but missing from `package.json` → added to dependencies
+- `@tailwindcss/vite` and `tailwindcss` imported but missing from `package.json` → surfaced when npm reshuffled `node_modules` after adding recharts. **Lesson:** always verify every import has a `package.json` entry — transitive deps can silently disappear.
 
 **Next steps:**
 1. Test with rosbridge running (start Docker container + rosbridge + mock publisher, verify graphs populate)
@@ -47,6 +46,12 @@ Active branch: `feature/docker-environment-setup`
 Delete this section once picked up.
 
 ## Completed Milestones
+- **Milestone 6 — UI Foundation** (Mar 5, 2026)
+  - FastAPI backend with JWT auth (3 users), 13 tests passing
+  - React 19 + TypeScript + Tailwind CSS v4 + Recharts frontend
+  - Login page, dashboard: health cards, Grafana-style telemetry graphs, controls, alerts, task history
+  - rosbridge hook for real-time ROS2 data, system monitor node for Pi metrics
+  - Accessible from Windows browser at `http://192.168.0.41:5173`
 - **Milestone 1 — Environment Setup** (Feb 25, 2026)
   - ROS2 Humble running in Docker on RPi5 (ros:humble-ros-base-jammy)
   - RPi5 host OS: Ubuntu Server 24.04, Docker containers run Ubuntu 22.04
@@ -71,7 +76,7 @@ Delete this section once picked up.
 - Docker (ros:humble-ros-base-jammy) — containerized ROS2 environment
 - go2_ros2_sdk (hardware bridge)
 - Nav2 (navigation) + SLAM Toolbox (mapping)
-- FastAPI + React (UI)
+- FastAPI + React 19 + TypeScript + Tailwind CSS v4 + Recharts (UI)
 - rosbridge_suite (ROS2 ↔ Web)
 - CycloneDDS middleware
 

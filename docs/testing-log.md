@@ -11,7 +11,7 @@
 |----------|-------|--------|---------------|
 | Backend unit tests (pytest) | 13 | All passing | Mar 3, 2026 |
 | Docker container verification | 6 checks | All passing | Feb 25, 2026 |
-| Frontend manual smoke tests | 8 checks | All passing | Mar 3, 2026 |
+| Frontend manual smoke tests | 8 checks | All passing | Mar 5, 2026 |
 | Rosbridge + mock publisher integration | 4 checks | **In progress** | Mar 5, 2026 |
 
 ---
@@ -158,6 +158,24 @@ Verify the full data pipeline: Mock Publisher → ROS2 topics → rosbridge WebS
 | 9 | Mar 5 | Medium | `piConnected` stale closure — "Pi connection lost" alert never fires | Open | `useEffect` captures initial `piConnected` value, needs ref |
 | 10 | Mar 5 | Low | `LoginPage.tsx` duplicates `API` URL logic instead of importing from `config.ts` | Open | Minor DRY violation |
 | 11 | Mar 5 | Low | `/tasks` and `/estop` endpoints have no auth verification on backend | Open | Frontend sends token but backend ignores it |
+| 12 | Mar 5 | High | `recharts` imported in `TelemetryGraphs.tsx` but not in `package.json` — fresh `npm install` breaks | Fixed | Added `recharts: ^2.15.3` to dependencies (commit `9f4fc18`) |
+| 13 | Mar 5 | High | `tailwindcss` and `@tailwindcss/vite` imported in `vite.config.ts` but not in `package.json` — surfaced when adding recharts caused npm to reshuffle `node_modules` | Fixed | Added both to devDependencies (commit `c09d577`). **Root cause:** packages existed as transitive deps but were never explicitly listed. |
+
+---
+
+## 5a. Telemetry Graph Improvements (Mar 5, 2026)
+
+**What changed:** Replaced default Recharts auto-scaling with Grafana-style behavior.
+
+**Problem:** Y-axis auto-scaled every render — data floated in a narrow band, labels jumped every second. X-axis used category mode — tick labels shifted with each data push instead of sliding smoothly.
+
+**Solution (commit `9f4fc18`):**
+- **Y-axis:** Nice-number rounding (1/2/2.5/5/10 intervals) so bounds only change when data meaningfully shifts. Battery graph now shows ~95-100 instead of 0-100. `clampMin: 0` prevents negative bounds for battery/CPU/temp.
+- **X-axis:** Switched to numeric type with `domain=[now - rangeMs, now]`. Clock-aligned ticks (e.g., :00, :15, :30, :45 for 1h range). Data slides rightward with time.
+- **Time format:** Range-aware — `MM:SS` for 5m window, `HH:MM` for 15m+.
+- **Animation disabled** (`isAnimationActive={false}`) to prevent jank at 1Hz data push rate.
+
+**Verification:** Frontend starts on Pi, graphs render with mock data, Y-axis labels are stable round numbers, X-axis ticks are clock-aligned and don't jump.
 
 ---
 
