@@ -114,10 +114,10 @@ export function DashboardPage({ user, token, onLogout }: DashboardPageProps) {
 
   // Graph configs
   const graphs = [
-    { title: 'Battery', getData: batterySeries.getData, color: '#10b981', unit: '%' },
-    { title: 'Temperature', getData: tempSeries.getData, color: '#f59e0b', unit: '°C' },
+    { title: 'Battery', getData: batterySeries.getData, color: '#10b981', unit: '%', clampMin: 0 },
+    { title: 'Temperature', getData: tempSeries.getData, color: '#f59e0b', unit: '°C', clampMin: 0 },
     { title: 'IMU Acceleration', getData: imuSeries.getData, color: '#6366f1', unit: 'm/s²' },
-    { title: 'CPU Load', getData: cpuSeries.getData, color: '#0d9488', unit: '%' },
+    { title: 'CPU Load', getData: cpuSeries.getData, color: '#0d9488', unit: '%', clampMin: 0 },
   ]
 
   return (
