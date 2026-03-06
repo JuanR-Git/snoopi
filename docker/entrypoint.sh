@@ -40,11 +40,15 @@ echo "[entrypoint] Starting command_bridge..."
 ros2 run snoopi_command_bridge command_bridge \
     > /ros2_ws/logs/command_bridge.log 2>&1 &
 
-# 4. go2_ros2_sdk bridge — robot telemetry and control
-#    This launches the full SDK bridge (driver, LiDAR, camera, etc.)
-#    It will fail gracefully if the robot is not connected via Ethernet.
-echo "[entrypoint] Starting go2_ros2_sdk bridge..."
-ros2 launch go2_robot_sdk robot.launch.py \
+# 4. go2_ros2_sdk driver — robot telemetry and control
+#    Runs the core driver node directly (not robot.launch.py which requires
+#    foxglove_bridge and launches Nav2/SLAM/rviz2 that we don't need yet).
+#    ROBOT_IP env var is set in docker-compose.yml.
+#    Will fail gracefully if the robot is not connected via Ethernet.
+echo "[entrypoint] Starting go2_driver_node (ROBOT_IP=${ROBOT_IP:-not set})..."
+ros2 run go2_robot_sdk go2_driver_node --ros-args \
+    -p robot_ip:="${ROBOT_IP}" \
+    -p conn_type:="${CONN_TYPE:-webrtc}" \
     > /ros2_ws/logs/go2_sdk.log 2>&1 &
 
 echo ""

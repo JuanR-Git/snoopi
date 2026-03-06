@@ -12,6 +12,11 @@ services:
       - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
       - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
       - CYCLONEDDS_URI=/ros2_ws/cyclonedds.xml
+      # ┌─────────────────────────────────────────────────────────┐
+      # │  FILL IN BEFORE LAB: Set to the Go2 Air's IP address   │
+      # │  Expected: 192.168.123.161 (verify with arp -a)        │
+      # └─────────────────────────────────────────────────────────┘
+      - ROBOT_IP=192.168.123.161
     volumes:
       # Your ROS2 node source code — edit on host, build inside container
       - ./src:/ros2_ws/src
