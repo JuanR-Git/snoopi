@@ -14,11 +14,17 @@
     </General>
     <Discovery>
       <ParticipantIndex>auto</ParticipantIndex>
-      <!-- Uncomment and add robot IP when ready to connect:
+      <!--
+        ┌─────────────────────────────────────────────────────┐
+        │  FILL IN BEFORE LAB: Replace the IP below with the  │
+        │  Go2 Air's actual IP address.                        │
+        │  Expected: 192.168.123.161 (verify in lab)           │
+        │  To find it: connect Ethernet, run `arp -a` on Pi    │
+        └─────────────────────────────────────────────────────┘
+      -->
       <Peers>
         <Peer Address="192.168.123.161"/>
       </Peers>
-      -->
     </Discovery>
   </Domain>
 </CycloneDDS>
