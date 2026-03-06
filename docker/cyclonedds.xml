@@ -5,11 +5,10 @@
             https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclonedds.xsd">
   <Domain id="any">
     <General>
-      <!-- auto = CycloneDDS picks the best available interface -->
-      <!-- When connecting to robot over Ethernet, change to your interface name -->
-      <!-- Run 'ip link show' on the Pi to find it (usually eth0 or enp3s0) -->
+      <!-- Use eth0 for robot communication over Ethernet -->
+      <!-- If your interface name differs, run 'ip link show' on the Pi to find it -->
       <Interfaces>
-        <NetworkInterface autodetermine="true"/>
+        <NetworkInterface name="eth0"/>
       </Interfaces>
     </General>
     <Discovery>

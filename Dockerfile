@@ -81,8 +81,12 @@ COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Source ROS2 workspaces in .bashrc so interactive shells (docker exec)
-# have ros2 commands available without manually sourcing
-RUN echo "source /entrypoint.sh" >> /root/.bashrc
+# have ros2 commands available without manually sourcing.
+# NOTE: Only source workspace setup files here — NOT the full entrypoint.
+# The entrypoint launches services; .bashrc is for interactive shells only.
+RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc && \
+    echo "source /opt/go2_ws/install/setup.bash" >> /root/.bashrc && \
+    echo '[ -f /ros2_ws/install/setup.bash ] && source /ros2_ws/install/setup.bash' >> /root/.bashrc
 
 # Set CycloneDDS as the ROS2 middleware (required by go2_ros2_sdk)
 ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
