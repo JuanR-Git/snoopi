@@ -19,6 +19,8 @@ services:
       - ./docker/cyclonedds.xml:/ros2_ws/cyclonedds.xml:ro
       # Host /sys for system_monitor (RPi5 temp, fan status) — read-only
       - /sys:/sys:ro
+    # Override Dockerfile CMD — entrypoint handles lifecycle (auto-launches services + tails logs)
+    command: []
     # Keep stdin/tty open so docker exec works cleanly
     stdin_open: true
     tty: true
