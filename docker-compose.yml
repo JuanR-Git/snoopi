@@ -17,6 +17,8 @@ services:
       - ./src:/ros2_ws/src
       # DDS config — edit without rebuilding the image
       - ./docker/cyclonedds.xml:/ros2_ws/cyclonedds.xml:ro
+      # Host /sys for system_monitor (RPi5 temp, fan status) — read-only
+      - /sys:/sys:ro
     # Keep stdin/tty open so docker exec works cleanly
     stdin_open: true
     tty: true
