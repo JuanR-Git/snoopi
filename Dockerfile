@@ -47,7 +47,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # image once and never rebuilt during day-to-day development.
 WORKDIR /opt/go2_ws
 RUN mkdir src && \
-    git clone https://github.com/abizovnuralem/go2_ros2_sdk.git src/go2_ros2_sdk
+    git clone --recursive https://github.com/abizovnuralem/go2_ros2_sdk.git src/go2_ros2_sdk
 
 # Layer 4: SDK Python dependencies (WebRTC, MQTT, crypto, etc.)
 # Uses our curated ARM64-compatible list instead of the SDK's full

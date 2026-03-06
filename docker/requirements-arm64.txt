@@ -11,6 +11,11 @@
 #
 # To re-sync with upstream, diff this file against:
 #   /opt/go2_ws/src/go2_ros2_sdk/requirements.txt
+#
+# Additional packages not in SDK requirements.txt but imported by SDK source:
+#   requests      — HTTP signaling to robot (http_client.py)
+#   cryptography  — AES-GCM decryption for WebRTC (go2_connection.py)
+#                   Also a transitive dep of aiortc, listed explicitly for clarity.
 
 aiortc==1.9.0
 aiohttp
@@ -22,3 +27,5 @@ opencv-python
 pydub
 numpy==1.26.4
 psutil
+requests
+cryptography
