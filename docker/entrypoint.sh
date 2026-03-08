@@ -49,6 +49,7 @@ echo "[entrypoint] Starting go2_driver_node (ROBOT_IP=${ROBOT_IP:-not set})..."
 ros2 run go2_robot_sdk go2_driver_node --ros-args \
     -p robot_ip:="${ROBOT_IP}" \
     -p conn_type:="${CONN_TYPE:-webrtc}" \
+    -p enable_video:=false \
     > /ros2_ws/logs/go2_sdk.log 2>&1 &
 
 echo ""
@@ -57,7 +58,7 @@ echo "  snoopi-ros2 container is running"
 echo "  rosbridge:      ws://localhost:9090"
 echo "  system_monitor:  /snoopi/system_stats"
 echo "  command_bridge:  /snoopi/command"
-echo "  go2_sdk:        /utlidar/battery, /imu/data, ..."
+echo "  go2_sdk:        /snoopi/battery, /imu, /joint_states, ..."
 echo "  Logs:           /ros2_ws/logs/"
 echo "============================================"
 echo ""

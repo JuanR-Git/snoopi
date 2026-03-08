@@ -1,13 +1,21 @@
 import { useEffect, useState } from 'react'
 
-interface BatteryState {
-  percentage: number
-  voltage: number
-  temperature: number
+// Battery: JSON String from our SDK patch on /snoopi/battery
+interface BatteryData {
+  soc: number
+  current: number
+  power_v: number
+  temperature_ntc1: number
+  cycle: number
 }
 
-interface Imu {
-  linear_acceleration: { x: number; y: number; z: number }
+// IMU: go2_interfaces/msg/IMU (custom type, not sensor_msgs)
+interface Go2Imu {
+  quaternion: number[]
+  gyroscope: number[]
+  accelerometer: number[]
+  rpy: number[]
+  temperature: number
 }
 
 interface Props {
@@ -18,25 +26,28 @@ interface Props {
 }
 
 export function RobotHealthCard({ subscribe, onBatteryUpdate, onTempUpdate, onImuUpdate }: Props) {
-  const [battery, setBattery] = useState<BatteryState | null>(null)
-  const [imu, setImu] = useState<Imu | null>(null)
+  const [battery, setBattery] = useState<BatteryData | null>(null)
+  const [imu, setImu] = useState<Go2Imu | null>(null)
 
   useEffect(() => {
-    const unsubBattery = subscribe<BatteryState>('/utlidar/battery', 'sensor_msgs/msg/BatteryState', (msg) => {
-      setBattery(msg)
-      onBatteryUpdate?.(msg.percentage * 100)
-      onTempUpdate?.(msg.temperature)
+    // Battery arrives as JSON inside a std_msgs/String on /snoopi/battery
+    const unsubBattery = subscribe<{ data: string }>('/snoopi/battery', 'std_msgs/msg/String', (msg) => {
+      const data: BatteryData = JSON.parse(msg.data)
+      setBattery(data)
+      onBatteryUpdate?.(data.soc)
+      onTempUpdate?.(data.temperature_ntc1)
     })
-    const unsubImu = subscribe<Imu>('/imu/data', 'sensor_msgs/msg/Imu', (msg) => {
+    // IMU is go2_interfaces/msg/IMU on /imu (not sensor_msgs/Imu on /imu/data)
+    const unsubImu = subscribe<Go2Imu>('/imu', 'go2_interfaces/msg/IMU', (msg) => {
       setImu(msg)
-      onImuUpdate?.(msg.linear_acceleration.z)
+      onImuUpdate?.(msg.accelerometer[2])
     })
     return () => { unsubBattery(); unsubImu() }
   }, [subscribe, onBatteryUpdate, onTempUpdate, onImuUpdate])
 
-  const batteryPct = battery ? Math.round(battery.percentage * 100) : null
-  const temp = battery ? battery.temperature : null
-  const imuZ = imu ? imu.linear_acceleration.z : null
+  const batteryPct = battery ? Math.round(battery.soc) : null
+  const temp = battery ? battery.temperature_ntc1 : null
+  const imuZ = imu ? imu.accelerometer[2] : null
 
   const batteryColor = batteryPct === null ? 'bg-slate-200'
     : batteryPct > 50 ? 'bg-emerald-500'

@@ -72,6 +72,16 @@ RUN /bin/bash -c "source /opt/ros/humble/setup.bash && \
     --packages-skip lidar_processor_cpp coco_detector \
     --cmake-args -DCMAKE_BUILD_TYPE=Release"
 
+# Layer 6: patch SDK to publish battery/BMS data on /snoopi/battery
+# The SDK receives bms_state in rt/lf/lowstate but discards it — this patch
+# extracts it and publishes as a JSON String so the dashboard can display
+# battery %, voltage, and temperature.  Rebuilds only go2_robot_sdk.
+COPY docker/patches/ /tmp/patches/
+RUN python3 /tmp/patches/add_battery_publisher.py && \
+    /bin/bash -c "source /opt/ros/humble/setup.bash && \
+    cd /opt/go2_ws && colcon build --symlink-install --packages-select go2_robot_sdk" && \
+    rm -rf /tmp/patches/
+
 # Create the user workspace mount point
 # ./src on the host is volume-mounted here at runtime via docker-compose
 RUN mkdir -p /ros2_ws/src
