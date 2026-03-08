@@ -26,19 +26,19 @@ PATCHES = []
 PATCHES.append({
     "file": SDK_ROOT / "application/services/robot_data_service.py",
     "find": """\
-        robot_data.joint_data = JointData(
-            motor_state=low_state_data['motor_state']
-        )""",
+            robot_data.joint_data = JointData(
+                motor_state=low_state_data['motor_state']
+            )""",
     "replace": """\
-        robot_data.joint_data = JointData(
-            motor_state=low_state_data['motor_state']
-        )
-        # [snoopi patch] Store BMS data for battery publishing
-        robot_data.bms_raw = {
-            'bms_state': low_state_data.get('bms_state', {}),
-            'power_v': low_state_data.get('power_v', 0.0),
-            'temperature_ntc1': low_state_data.get('temperature_ntc1', 0),
-        }""",
+            robot_data.joint_data = JointData(
+                motor_state=low_state_data['motor_state']
+            )
+            # [snoopi patch] Store BMS data for battery publishing
+            robot_data.bms_raw = {
+                'bms_state': low_state_data.get('bms_state', {}),
+                'power_v': low_state_data.get('power_v', 0.0),
+                'temperature_ntc1': low_state_data.get('temperature_ntc1', 0),
+            }""",
     "desc": "Store bms_raw in _process_low_state",
 })
 
@@ -47,12 +47,12 @@ PATCHES.append({
 PATCHES.append({
     "file": SDK_ROOT / "application/services/robot_data_service.py",
     "find": """\
-            self._process_low_state(msg, robot_data)
-            self.publisher.publish_joint_state(robot_data)""",
+                self._process_low_state(msg, robot_data)
+                self.publisher.publish_joint_state(robot_data)""",
     "replace": """\
-            self._process_low_state(msg, robot_data)
-            self.publisher.publish_joint_state(robot_data)
-            self.publisher.publish_battery(robot_data)""",
+                self._process_low_state(msg, robot_data)
+                self.publisher.publish_joint_state(robot_data)
+                self.publisher.publish_battery(robot_data)""",
     "desc": "Call publish_battery after publish_joint_state",
 })
 
