@@ -41,13 +41,23 @@ if [ -z "$ETH_IFACE" ]; then
 fi
 echo "  Ethernet:  $ETH_IFACE"
 
-# Detect npm path
+# Detect npm path — check standard locations, then fnm (Fast Node Manager)
 NPM_PATH=$(which npm 2>/dev/null || echo "")
+if [ -z "$NPM_PATH" ]; then
+    # sudo doesn't inherit user's fnm PATH — search fnm install directly
+    NPM_PATH=$(ls "$PI_HOME/.local/share/fnm/node-versions"/*/installation/bin/npm 2>/dev/null | sort -V | tail -1)
+fi
+if [ -z "$NPM_PATH" ]; then
+    NPM_PATH=$(ls "$PI_HOME/.fnm/node-versions"/*/installation/bin/npm 2>/dev/null | sort -V | tail -1)
+fi
 if [ -z "$NPM_PATH" ]; then
     echo "ERROR: npm not found. Install Node.js first."
     exit 1
 fi
+NPM_PATH=$(readlink -f "$NPM_PATH")
+NODE_BIN_DIR=$(dirname "$NPM_PATH")
 echo "  npm:       $NPM_PATH"
+echo "  node dir:  $NODE_BIN_DIR"
 
 # Verify paths exist
 if [ ! -f "$PI_HOME/snoopi/backend/venv/bin/uvicorn" ]; then
@@ -131,6 +141,8 @@ Type=simple
 User=$PI_USER
 Group=$PI_USER
 WorkingDirectory=$PI_HOME/snoopi/ui
+# fnm installs node/npm outside the default PATH — add it explicitly
+Environment=PATH=$NODE_BIN_DIR:/usr/local/bin:/usr/bin:/bin
 ExecStart=$NPM_PATH run dev -- --host 0.0.0.0
 Restart=on-failure
 RestartSec=5
