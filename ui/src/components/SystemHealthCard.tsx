@@ -4,6 +4,9 @@ interface SystemStats {
   cpu_percent: number
   temperature: number
   fan_on: boolean
+  robot_reachable: boolean
+  driver_running: boolean
+  robot_message: string
 }
 
 interface Props {
@@ -61,6 +64,15 @@ export function SystemHealthCard({ subscribe, piConnected, onCpuUpdate }: Props)
           <span className="inline-flex items-center gap-1.5">
             <StatusDot online={piConnected} />
             <span className="font-medium">{piConnected ? 'Connected' : 'Offline'}</span>
+          </span>
+        </div>
+        <div className="flex justify-between text-sm items-center">
+          <span className="text-slate-600">Robot Connection</span>
+          <span className="inline-flex items-center gap-1.5">
+            <StatusDot online={!!stats?.robot_reachable && !!stats?.driver_running} />
+            <span className="font-medium">
+              {stats ? (stats.robot_reachable && stats.driver_running ? 'Connected' : stats.robot_message || 'Disconnected') : '—'}
+            </span>
           </span>
         </div>
         <div className="flex justify-between text-sm items-center">

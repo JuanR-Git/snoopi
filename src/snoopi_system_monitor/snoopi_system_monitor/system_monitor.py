@@ -37,13 +37,24 @@ class SystemMonitor(Node):
         except Exception:
             return False
 
+    def _read_robot_status(self) -> dict:
+        try:
+            raw = Path('/ros2_ws/logs/robot_status.json').read_text().strip()
+            return json.loads(raw)
+        except Exception:
+            return {'robot_reachable': False, 'driver_running': False, 'message': 'Status file not found'}
+
     def _publish(self):
         cpu = psutil.cpu_percent(interval=None) if psutil else 0.0
+        robot = self._read_robot_status()
         msg = String()
         msg.data = json.dumps({
             'cpu_percent': cpu,
             'temperature': self._read_temp(),
             'fan_on': self._read_fan(),
+            'robot_reachable': robot.get('robot_reachable', False),
+            'driver_running': robot.get('driver_running', False),
+            'robot_message': robot.get('message', ''),
         })
         self._pub.publish(msg)
 

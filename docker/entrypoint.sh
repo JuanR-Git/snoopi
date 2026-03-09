@@ -40,26 +40,80 @@ echo "[entrypoint] Starting command_bridge..."
 ros2 run snoopi_command_bridge command_bridge \
     > /ros2_ws/logs/command_bridge.log 2>&1 &
 
-# 4. go2_ros2_sdk driver — robot telemetry and control
-#    Runs the core driver node directly (not robot.launch.py which requires
-#    foxglove_bridge and launches Nav2/SLAM/rviz2 that we don't need yet).
-#    ROBOT_IP env var is set in docker-compose.yml.
-#    Will fail gracefully if the robot is not connected via Ethernet.
-echo "[entrypoint] Starting go2_driver_node (ROBOT_IP=${ROBOT_IP:-not set})..."
-ros2 run go2_robot_sdk go2_driver_node --ros-args \
-    -p robot_ip:="${ROBOT_IP}" \
-    -p conn_type:="${CONN_TYPE:-webrtc}" \
-    -p enable_video:=false \
-    > /ros2_ws/logs/go2_sdk.log 2>&1 &
+# 4. go2_ros2_sdk driver — managed by watchdog (see below)
+#    The watchdog pings the robot before launching, retries if unreachable,
+#    and restarts the driver if it crashes (WebRTC drops).
+
+# ── Robot connection watchdog ─────────────────────────────────
+ROBOT_STATUS_FILE="/ros2_ws/logs/robot_status.json"
+DRIVER_PID=""
+
+write_robot_status() {
+    local reachable="$1"
+    local driver_running="$2"
+    local message="$3"
+    echo "{\"robot_reachable\": $reachable, \"driver_running\": $driver_running, \"message\": \"$message\", \"timestamp\": \"$(date -Iseconds)\"}" > "$ROBOT_STATUS_FILE"
+}
+
+start_driver() {
+    echo "[watchdog] Starting go2_driver_node (ROBOT_IP=${ROBOT_IP})..."
+    ros2 run go2_robot_sdk go2_driver_node --ros-args \
+        -p robot_ip:="${ROBOT_IP}" \
+        -p conn_type:="${CONN_TYPE:-webrtc}" \
+        -p enable_video:=false \
+        > /ros2_ws/logs/go2_sdk.log 2>&1 &
+    DRIVER_PID=$!
+    write_robot_status true true "Driver started (PID $DRIVER_PID)"
+    echo "[watchdog] go2_driver_node started (PID $DRIVER_PID)"
+}
+
+robot_watchdog() {
+    local check_interval=30
+    while true; do
+        if ping -c 1 -W 2 "${ROBOT_IP}" > /dev/null 2>&1; then
+            # Robot is reachable
+            if [ -z "$DRIVER_PID" ] || ! kill -0 "$DRIVER_PID" 2>/dev/null; then
+                # Driver not running — start it
+                if [ -n "$DRIVER_PID" ]; then
+                    echo "[watchdog] Driver (PID $DRIVER_PID) died — restarting..."
+                    write_robot_status true false "Driver crashed, restarting..."
+                    sleep 5
+                fi
+                start_driver
+            else
+                # All good — driver running, robot reachable
+                write_robot_status true true "Connected"
+            fi
+        else
+            # Robot not reachable
+            if [ -n "$DRIVER_PID" ] && kill -0 "$DRIVER_PID" 2>/dev/null; then
+                echo "[watchdog] Robot unreachable — stopping driver (PID $DRIVER_PID)"
+                kill "$DRIVER_PID" 2>/dev/null
+                wait "$DRIVER_PID" 2>/dev/null || true
+                DRIVER_PID=""
+                write_robot_status false false "Robot unreachable, driver stopped"
+            else
+                DRIVER_PID=""
+                write_robot_status false false "Robot unreachable"
+            fi
+        fi
+        sleep "$check_interval"
+    done
+}
+
+# Write initial status and start watchdog
+write_robot_status false false "Starting up..."
+echo "[entrypoint] Starting robot connection watchdog (ROBOT_IP=${ROBOT_IP:-not set})..."
+robot_watchdog &
 
 echo ""
 echo "============================================"
 echo "  snoopi-ros2 container is running"
-echo "  rosbridge:      ws://localhost:9090"
+echo "  rosbridge:       ws://localhost:9090"
 echo "  system_monitor:  /snoopi/system_stats"
 echo "  command_bridge:  /snoopi/command"
-echo "  go2_sdk:        /snoopi/battery, /imu, /joint_states, ..."
-echo "  Logs:           /ros2_ws/logs/"
+echo "  robot watchdog:  checks every 30s"
+echo "  Logs:            /ros2_ws/logs/"
 echo "============================================"
 echo ""
 
