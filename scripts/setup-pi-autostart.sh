@@ -41,21 +41,25 @@ if [ -z "$ETH_IFACE" ]; then
 fi
 echo "  Ethernet:  $ETH_IFACE"
 
-# Detect npm path — check standard locations, then fnm (Fast Node Manager)
+# Detect node bin directory — check standard locations, then fnm (Fast Node Manager)
+# fnm installs node/npm in ~/.local/share/fnm/node-versions/<version>/installation/bin/
+# sudo doesn't inherit user's fnm PATH, so we search the install directory directly.
+NODE_BIN_DIR=""
 NPM_PATH=$(which npm 2>/dev/null || echo "")
-if [ -z "$NPM_PATH" ]; then
-    # sudo doesn't inherit user's fnm PATH — search fnm install directly
-    NPM_PATH=$(ls "$PI_HOME/.local/share/fnm/node-versions"/*/installation/bin/npm 2>/dev/null | sort -V | tail -1)
+if [ -n "$NPM_PATH" ]; then
+    NODE_BIN_DIR=$(dirname "$(readlink -f "$(which node 2>/dev/null)")")
 fi
-if [ -z "$NPM_PATH" ]; then
-    NPM_PATH=$(ls "$PI_HOME/.fnm/node-versions"/*/installation/bin/npm 2>/dev/null | sort -V | tail -1)
+if [ -z "$NODE_BIN_DIR" ] || [ ! -x "$NODE_BIN_DIR/npm" ]; then
+    NODE_BIN_DIR=$(ls -d "$PI_HOME/.local/share/fnm/node-versions"/*/installation/bin 2>/dev/null | sort -V | tail -1)
 fi
-if [ -z "$NPM_PATH" ]; then
+if [ -z "$NODE_BIN_DIR" ] || [ ! -x "$NODE_BIN_DIR/npm" ]; then
+    NODE_BIN_DIR=$(ls -d "$PI_HOME/.fnm/node-versions"/*/installation/bin 2>/dev/null | sort -V | tail -1)
+fi
+if [ -z "$NODE_BIN_DIR" ] || [ ! -x "$NODE_BIN_DIR/npm" ]; then
     echo "ERROR: npm not found. Install Node.js first."
     exit 1
 fi
-NPM_PATH=$(readlink -f "$NPM_PATH")
-NODE_BIN_DIR=$(dirname "$NPM_PATH")
+NPM_PATH="$NODE_BIN_DIR/npm"
 echo "  npm:       $NPM_PATH"
 echo "  node dir:  $NODE_BIN_DIR"
 
