@@ -68,7 +68,7 @@ start_driver() {
 }
 
 robot_watchdog() {
-    local check_interval=30
+    local check_interval=10
     while true; do
         if ping -c 1 -W 2 "${ROBOT_IP}" > /dev/null 2>&1; then
             # Robot is reachable
@@ -112,7 +112,7 @@ echo "  snoopi-ros2 container is running"
 echo "  rosbridge:       ws://localhost:9090"
 echo "  system_monitor:  /snoopi/system_stats"
 echo "  command_bridge:  /snoopi/command"
-echo "  robot watchdog:  checks every 30s"
+echo "  robot watchdog:  checks every 10s"
 echo "  Logs:            /ros2_ws/logs/"
 echo "============================================"
 echo ""
