@@ -7,7 +7,7 @@
 # Usage (inside snoopi-ros2 container):
 #   ros2 run snoopi_control safe_space
 #
-# Requires go2_driver_node to be running (provides /point_cloud2, /odom, cmd_vel_out topics).
+# Requires go2_driver_node to be running (provides /point_cloud2, /odom, cmd_vel topics).
 
 #!/usr/bin/env python3
 import rclpy
@@ -191,7 +191,7 @@ class LidarViewer(Node):
 class Go2Mover(Node):
     def __init__(self, obs_det):
         super().__init__('go2_mover')
-        self.publisher_ = self.create_publisher(Twist, 'cmd_vel_out', 10)
+        self.publisher_ = self.create_publisher(Twist, 'cmd_vel', 10)
         self.startup_scan_done = False
         self.scan_start_time = None
         self.obs = obs_det

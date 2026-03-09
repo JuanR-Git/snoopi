@@ -45,7 +45,7 @@ class ParamController(Node):
 class Go2Mover(Node):
     def __init__(self):
         super().__init__('go2_mover')
-        self.publisher_ = self.create_publisher(Twist, 'cmd_vel_out', 10)
+        self.publisher_ = self.create_publisher(Twist, 'cmd_vel', 10)
         self.obstacle_detected = False
 
         qos = QoSProfile(
