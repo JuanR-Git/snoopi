@@ -41,6 +41,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-xacro \
     ros-humble-robot-state-publisher \
     ros-humble-joint-state-publisher \
+    ros-humble-tf2-sensor-msgs \
     && rm -rf /var/lib/apt/lists/*
 
 # Layer 3: clone go2_ros2_sdk into a dedicated workspace at /opt/go2_ws/
