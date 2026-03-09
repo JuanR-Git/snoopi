@@ -13,6 +13,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # python3-colcon-common-extensions, python3-rosdep, python3-vcstool
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip \
+    iputils-ping \
     && rm -rf /var/lib/apt/lists/*
 
 # Layer 2: ROS2 binary packages (pre-compiled for arm64 from packages.ros.org)
