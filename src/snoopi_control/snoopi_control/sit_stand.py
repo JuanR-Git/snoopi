@@ -156,7 +156,7 @@ class LidarViewer(Node):
 class Go2Mover(Node):
     def __init__(self, obs_det):
         super().__init__('go2_mover')
-        self.publisher_ = self.create_publisher(Twist, 'cmd_vel', 10)
+        self.publisher_ = self.create_publisher(Twist, 'cmd_vel_out', 10)
         self.cmd_pub = self.create_publisher(String, '/snoopi/command', 10)
         self.startup_scan_done = False
         self.scan_start_time = None

@@ -21,7 +21,7 @@ class CommandBridge(Node):
         self.create_subscription(String, '/snoopi/command', self._on_command, 10)
 
         # Publisher for emergency stop — zero velocity to /cmd_vel
-        self._cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+        self._cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel_out', 10)
 
         self.get_logger().info('Command bridge started -- listening on /snoopi/command')
 
