@@ -15,6 +15,7 @@ setup(
             'autonomous_walk = snoopi_control.autonomous_walk:main',
             'sample_move = snoopi_control.sample_move:main',
             'sit_stand = snoopi_control.sit_stand:main',
+	    'following = snoopi_control.following:main',
         ],
     },
 )
