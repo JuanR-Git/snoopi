@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CycloneDDS xmlns="https://cdds.io/config"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="https://cdds.io/config
+            https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclonedds.xsd">
+  <Domain id="any">
+    <General>
+      <!-- autodetermine: CycloneDDS picks the best available interface.
+           This must stay autodetermine so the container works with or without
+           the robot Ethernet connected. In the lab, the OS routing table
+           directs 192.168.123.x traffic through eth0 automatically.
+           If DDS discovery fails in the lab, override to: name="eth0" -->
+      <Interfaces>
+        <NetworkInterface autodetermine="true"/>
+      </Interfaces>
+    </General>
+    <Discovery>
+      <ParticipantIndex>auto</ParticipantIndex>
+      <!--
+        ┌─────────────────────────────────────────────────────┐
+        │  FILL IN BEFORE LAB: Replace the IP below with the  │
+        │  Go2 Air's actual IP address.                        │
+        │  Expected: 192.168.123.161 (verify in lab)           │
+        │  To find it: connect Ethernet, run `arp -a` on Pi    │
+        └─────────────────────────────────────────────────────┘
+      -->
+      <Peers>
+        <Peer Address="192.168.123.161"/>
+      </Peers>
+    </Discovery>
+  </Domain>
+</CycloneDDS>

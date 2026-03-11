@@ -1,0 +1,17 @@
+[
+  {
+    "username": "john",
+    "display_name": "John",
+    "password_hash": "$2b$12$DN17Y4PMY.UlPTJ9NYbHhuOhVJEE4RambazzKF8osiWOFJcwi/vU6"
+  },
+  {
+    "username": "juan",
+    "display_name": "Juan",
+    "password_hash": "$2b$12$ZTA.deOAkR53XXSKqWunpOGj4cm437zbxTxF0sK8guUPZgB3JRTP2"
+  },
+  {
+    "username": "mihir",
+    "display_name": "Mihir",
+    "password_hash": "$2b$12$aN8z6x78o/JsX81qQMTNj.6nRKLQduE1bp6IJZgoUWXAu.R3LfI32"
+  }
+]

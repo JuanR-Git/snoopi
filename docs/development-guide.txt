@@ -1,0 +1,190 @@
+SNOOPI Development Guide
+========================
+How to create, deploy, and run robot control scripts on the Raspberry Pi.
+
+
+ARCHITECTURE OVERVIEW
+---------------------
+- Code is written on any machine and pushed to GitHub
+- The Raspberry Pi pulls from GitHub and runs everything
+- ROS2 runs inside a Docker container (snoopi-ros2) on the Pi
+- The go2_ros2_sdk driver connects to the robot over Ethernet via WebRTC
+- Your control scripts publish velocity commands to /cmd_vel_out
+- The driver forwards those commands to the robot
+
+
+PROJECT STRUCTURE
+-----------------
+src/snoopi_control/
+  setup.py                          <-- Register new scripts here
+  snoopi_control/
+    __init__.py
+    safe_space.py                   <-- Autonomous walk + obstacle avoidance
+    autonomous_walk.py              <-- Same with 21-bin path planning
+    sample_move.py                  <-- Simple forward/backward demo
+    sit_stand.py                    <-- Sit/stand on obstacle detection
+    your_new_script.py              <-- Your new scripts go here
+
+
+CREATING A NEW SCRIPT
+---------------------
+1. Create your Python file in src/snoopi_control/snoopi_control/
+
+   Your script must have a main() function. Example skeleton:
+
+     #!/usr/bin/env python3
+     import rclpy
+     from rclpy.node import Node
+     from geometry_msgs.msg import Twist
+
+     class MyNode(Node):
+         def __init__(self):
+             super().__init__('my_node')
+             self.publisher_ = self.create_publisher(Twist, 'cmd_vel_out', 10)
+
+         def do_something(self):
+             msg = Twist()
+             msg.linear.x = 0.3
+             self.publisher_.publish(msg)
+
+     def main(args=None):
+         rclpy.init(args=args)
+         node = MyNode()
+         try:
+             rclpy.spin(node)
+         except KeyboardInterrupt:
+             pass
+         node.destroy_node()
+         if rclpy.ok():
+             rclpy.shutdown()
+
+     if __name__ == '__main__':
+         main()
+
+2. Add ONE line to src/snoopi_control/setup.py in the console_scripts list:
+
+     entry_points={
+         'console_scripts': [
+             'safe_space = snoopi_control.safe_space:main',
+             'autonomous_walk = snoopi_control.autonomous_walk:main',
+             'sample_move = snoopi_control.sample_move:main',
+             'sit_stand = snoopi_control.sit_stand:main',
+             'your_script = snoopi_control.your_script:main',   <-- ADD THIS
+         ],
+     },
+
+   Format: command_name = snoopi_control.filename:main
+
+3. Commit and push:
+
+     git add -A
+     git commit -m "feat: add your_script"
+     git push
+
+
+DEPLOYING TO THE PI
+-------------------
+SSH into the Pi:
+
+    ssh snoopi@192.168.1.125
+    Password: (ask the team)
+
+Pull the latest code:
+
+    cd ~/snoopi && git pull
+
+Enter the Docker container:
+
+    docker exec -it snoopi-ros2 bash
+
+Rebuild the control package:
+
+    cd /ros2_ws && colcon build --symlink-install --packages-select snoopi_control && source install/setup.bash
+
+Run your script:
+
+    ros2 run snoopi_control your_script
+
+Stop with Ctrl+C.
+
+
+RUNNING THE ROBOT (FULL WORKFLOW)
+---------------------------------
+1. Turn on the Go2 Air robot, wait ~30 seconds for it to stand up
+2. Make sure the Unitree phone app is CLOSED (only one WebRTC client at a time)
+3. Ethernet cable must be connected between robot and Pi
+4. SSH into Pi: ssh snoopi@192.168.1.125
+5. Enter container: docker exec -it snoopi-ros2 bash
+6. Run your script: ros2 run snoopi_control sample_move
+
+That's it. The Docker container auto-starts on boot, the driver auto-connects
+to the robot when it's reachable.
+
+
+TROUBLESHOOTING
+---------------
+Robot doesn't move:
+  1. Check the driver is connected:
+       cat /ros2_ws/logs/go2_sdk.log | tail -5
+     You want to see "Robot 0 validated and ready"
+
+  2. If you see "State is connecting", restart the driver:
+       pkill -f go2_driver_node
+       sleep 20
+       cat /ros2_ws/logs/go2_sdk.log | tail -5
+
+  3. If still stuck, power cycle the robot (off, wait 15s, on) and try again
+
+  4. Verify the robot is reachable:
+       ping -c 3 192.168.123.161
+
+"No module named snoopi_control":
+  You forgot to rebuild after pulling new code:
+    cd /ros2_ws && colcon build --symlink-install --packages-select snoopi_control && source install/setup.bash
+
+Container not running:
+    docker compose up -d    (run from ~/snoopi on the Pi)
+
+
+KEY RULES
+---------
+- Publish velocity to 'cmd_vel_out' (NOT 'cmd_vel')
+- Only run ONE control script at a time (they all publish to cmd_vel_out)
+- Max robot speed: 0.5 m/s
+- Always have a KeyboardInterrupt handler that stops the robot
+- DO NOT update the robot firmware (V1.1.7 is the compatible version)
+- Close the Unitree phone app before connecting from the Pi
+
+
+AVAILABLE ROS2 TOPICS FROM THE ROBOT
+-------------------------------------
+/cmd_vel_out      - Velocity commands TO the robot (Twist)
+/point_cloud2     - 3D LiDAR point cloud (PointCloud2)
+/odom             - Odometry / position (Odometry)
+/imu              - IMU data (go2_interfaces/msg/IMU)
+/joint_states     - Joint positions (JointState)
+/go2_states       - Robot state info
+/snoopi/battery   - Battery data as JSON (std_msgs/String)
+/snoopi/command   - Dashboard commands: "estop", "sit", "stand" (String)
+
+
+QUICK EDIT ON THE PI (SKIP GIT)
+-------------------------------
+For rapid testing, you can edit files directly on the Pi:
+
+    nano ~/snoopi/src/snoopi_control/snoopi_control/your_script.py
+
+Then rebuild in the container:
+
+    cd /ros2_ws && colcon build --symlink-install --packages-select snoopi_control && source install/setup.bash
+    ros2 run snoopi_control your_script
+
+Remember to commit your changes to git afterwards so they aren't lost.
+
+
+LOGIN CREDENTIALS
+-----------------
+Dashboard: http://192.168.1.125:5173
+  john  / snoopi-john-2026
+  juan  / snoopi-juan-2026
+  mihir / snoopi-mihir-2026

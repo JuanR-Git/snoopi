@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>snoopi_system_monitor</name>
+  <version>0.1.0</version>
+  <description>Publishes RPi5 system metrics (CPU, temp, fan) to ROS2 topics</description>
+  <maintainer email="dev@snoopi.local">snoopi</maintainer>
+  <license>MIT</license>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

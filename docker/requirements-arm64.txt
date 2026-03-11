@@ -1,0 +1,32 @@
+# ARM64-compatible subset of go2_ros2_sdk/requirements.txt
+# Curated for Raspberry Pi 5 deployment.
+#
+# Excluded packages (with reasons):
+#   open3d        — no Linux aarch64 wheel on PyPI; only used for 3D point
+#                   cloud visualization, not needed for Nav2/SLAM (they
+#                   consume PointCloud2 directly)
+#   torch         — ~300 MB wheel; only used by coco_detector node (object
+#                   detection), not in MVP scope
+#   torchvision   — depends on torch; same reasoning as above
+#
+# To re-sync with upstream, diff this file against:
+#   /opt/go2_ws/src/go2_ros2_sdk/requirements.txt
+#
+# Additional packages not in SDK requirements.txt but imported by SDK source:
+#   requests      — HTTP signaling to robot (http_client.py)
+#   cryptography  — AES-GCM decryption for WebRTC (go2_connection.py)
+#                   Also a transitive dep of aiortc, listed explicitly for clarity.
+
+aiortc==1.9.0
+aiohttp
+paho-mqtt
+python-dotenv
+wasmtime
+pycryptodome
+opencv-python
+pydub
+numpy==1.26.4
+psutil
+requests
+cryptography
+pyserial
