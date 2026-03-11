@@ -1,0 +1,478 @@
+"""
+Patient Walk — integrated walk script combining path tracking, UWB patient
+following, LiDAR obstacle avoidance, and e-stop with sit/stand.
+
+State machine:
+  IDLE -> WALKING -> COMPLETED
+           |  ^
+           v  |
+      PATIENT_FAR  (UWB distance > patient_max_dist -> stop and wait)
+           |  ^
+           v  |
+      OBSTACLE_DETOUR  (LiDAR obstacle -> turn to safe angle)
+           |  ^
+           v  |
+      RETURNING_TO_PATH  (obstacle cleared -> turn back to path heading)
+
+  Any state -> E_STOPPED  (on /snoopi/estop -> sit down, zero velocity)
+  E_STOPPED -> IDLE       (on /snoopi/command "stand" -> stand up)
+"""
+
+import math
+import json
+import time
+
+import rclpy
+from rclpy.node import Node
+from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
+from geometry_msgs.msg import Twist
+from nav_msgs.msg import Odometry
+from sensor_msgs.msg import PointCloud2
+from std_msgs.msg import String, Bool
+from go2_interfaces.msg import WebRtcReq
+from tf2_ros import Buffer, TransformListener
+from tf2_sensor_msgs.tf2_sensor_msgs import do_transform_cloud
+import sensor_msgs_py.point_cloud2 as pc2
+
+# States
+IDLE = 'IDLE'
+WALKING = 'WALKING'
+PATIENT_FAR = 'PATIENT_FAR'
+OBSTACLE_DETOUR = 'OBSTACLE_DETOUR'
+RETURNING_TO_PATH = 'RETURNING_TO_PATH'
+COMPLETED = 'COMPLETED'
+E_STOPPED = 'E_STOPPED'
+
+# Default tunable parameters
+DEFAULT_PARAMS = {
+    'obstacle_dist': 0.40,
+    'obstacle_dist_safe': 0.30,
+    'patient_max_dist': 2.0,
+    'patient_min_dist': 0.3,
+    'patient_close_dist': 1.25,
+    'max_speed': 0.325,
+    'min_speed': 0.15,
+    'catchup_speed': 0.4,
+    'max_rotation': 0.7,
+    'walk_distance': 2.13,
+}
+
+
+class PatientWalk(Node):
+    """Single node that orchestrates the entire patient walk."""
+
+    def __init__(self):
+        super().__init__('patient_walk')
+
+        # --- Tunable parameters ---
+        self.params = dict(DEFAULT_PARAMS)
+
+        # --- State machine ---
+        self.state = IDLE
+        self.start_x = 0.0
+        self.start_y = 0.0
+        self.distance_walked = 0.0
+        self.path_heading = 0.0       # yaw when walk started (straight path direction)
+        self.current_yaw = 0.0
+        self.locked_angle = None      # target yaw during turns
+        self.pre_detour_heading = 0.0
+
+        # --- UWB state ---
+        self.patient_distance = None  # triangulated distance in meters
+        self.patient_ahead = False    # True if patient is in front of robot
+        self.anchor_1_dist = None
+        self.anchor_2_dist = None
+
+        # --- LiDAR state (integrated from LidarViewer) ---
+        self.lidar_min_dist = float('inf')
+        self.best_safe_angle = 0.0
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
+
+        # --- Odom state ---
+        self.odom_x = 0.0
+        self.odom_y = 0.0
+        self.odom_received = False
+
+        # --- Logging ---
+        self.last_log_time = 0.0
+        self.current_speed = 0.0
+
+        # --- Publishers ---
+        self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel_out', 10)
+        self.webrtc_pub = self.create_publisher(WebRtcReq, '/webrtc_req', 10)
+        self.walk_status_pub = self.create_publisher(String, '/snoopi/walk_status', 10)
+
+        # --- Subscribers ---
+        lidar_qos = QoSProfile(
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1,
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            durability=DurabilityPolicy.VOLATILE,
+        )
+        self.create_subscription(PointCloud2, '/point_cloud2', self._pointcloud_callback, lidar_qos)
+        self.create_subscription(Odometry, '/odom', self._odom_callback, 10)
+        self.create_subscription(String, '/snoopi/uwb_status', self._uwb_callback, 10)
+        self.create_subscription(Bool, '/snoopi/estop', self._estop_callback, 10)
+        self.create_subscription(String, '/snoopi/params', self._params_callback, 10)
+        self.create_subscription(String, '/snoopi/task_command', self._task_callback, 10)
+        # Listen for "stand" command to recover from E_STOPPED
+        self.create_subscription(String, '/snoopi/command', self._command_callback, 10)
+
+        # --- Timers ---
+        self.create_timer(0.01, self._control_loop)   # 100 Hz
+        self.create_timer(0.5, self._log_status)       # 2 Hz
+        self.create_timer(1.0, self._publish_status)   # 1 Hz
+
+        self.get_logger().info('PatientWalk node started — waiting in IDLE')
+
+    # ------------------------------------------------------------------ #
+    #  Callbacks                                                          #
+    # ------------------------------------------------------------------ #
+
+    def _odom_callback(self, msg):
+        q = msg.pose.pose.orientation
+        siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
+        cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+        self.current_yaw = math.atan2(siny_cosp, cosy_cosp)
+
+        self.odom_x = msg.pose.pose.position.x
+        self.odom_y = msg.pose.pose.position.y
+        self.odom_received = True
+
+        if self.state in (WALKING, PATIENT_FAR, OBSTACLE_DETOUR, RETURNING_TO_PATH):
+            dx = self.odom_x - self.start_x
+            dy = self.odom_y - self.start_y
+            self.distance_walked = math.sqrt(dx * dx + dy * dy)
+
+    def _uwb_callback(self, msg):
+        try:
+            data = json.loads(msg.data)
+            dist = data.get('triangulated_distance_m', -1)
+            self.patient_distance = dist if dist > 0 else None
+
+            a1 = data.get('anchor_1_distance_m')
+            a2 = data.get('anchor_2_distance_m')
+            if a1 is not None and a2 is not None:
+                self.anchor_1_dist = a1
+                self.anchor_2_dist = a2
+                diff = a1 - a2
+                if abs(diff) > 0.1:
+                    # anchor_1 (front) < anchor_2 (rear) => patient is in front
+                    self.patient_ahead = diff < 0
+                # else: within noise, keep previous direction
+        except (json.JSONDecodeError, KeyError, TypeError):
+            pass
+
+    def _estop_callback(self, msg):
+        if msg.data and self.state != E_STOPPED:
+            self.get_logger().fatal('E-STOP triggered — sitting down')
+            self.state = E_STOPPED
+            self._send_velocity(0.0, 0.0)
+            self._send_sit()
+
+    def _command_callback(self, msg):
+        """Listen for 'stand' to recover from E_STOPPED."""
+        cmd = msg.data.strip().lower()
+        if cmd == 'stand' and self.state == E_STOPPED:
+            self.get_logger().info('Stand received — recovering from E_STOPPED')
+            self._send_stand()
+            self.state = IDLE
+
+    def _params_callback(self, msg):
+        try:
+            updates = json.loads(msg.data)
+            for key, val in updates.items():
+                if key in self.params:
+                    self.params[key] = float(val)
+                    self.get_logger().info(f'Param updated: {key} = {self.params[key]}')
+        except (json.JSONDecodeError, ValueError, TypeError) as e:
+            self.get_logger().warn(f'Invalid params message: {e}')
+
+    def _task_callback(self, msg):
+        try:
+            data = json.loads(msg.data)
+            task_type = data.get('type', '').lower()
+            if task_type == 'walk' and self.state == IDLE:
+                # Optionally override walk distance from task
+                dist = data.get('distance_m')
+                if dist is not None and float(dist) > 0:
+                    self.params['walk_distance'] = float(dist)
+                self._start_walk()
+        except (json.JSONDecodeError, ValueError, TypeError) as e:
+            self.get_logger().warn(f'Invalid task_command: {e}')
+
+    def _pointcloud_callback(self, msg):
+        """LiDAR processing — adapted from LidarViewer in following.py."""
+        try:
+            transform = self.tf_buffer.lookup_transform(
+                'base_link',
+                msg.header.frame_id,
+                rclpy.time.Time(),
+                timeout=rclpy.duration.Duration(seconds=0.1),
+            )
+        except Exception:
+            return
+
+        cloud = do_transform_cloud(msg, transform)
+
+        min_dist = float('inf')
+        bins = 21
+        angle_min = -math.radians(45)
+        angle_max = math.radians(45)
+        bin_amount = [0.0001] * bins
+        bin_width = (angle_max - angle_min) / bins
+
+        for x, y, z in pc2.read_points(cloud, field_names=('x', 'y', 'z'), skip_nans=True):
+            if x <= 0:
+                continue
+
+            is_in_path = (-0.16 <= y <= 0.12)
+            is_in_vision = (-1.0 <= y <= 1.0)
+
+            if not is_in_vision:
+                continue
+            if z <= -0.1 or z >= 0.1:
+                continue
+
+            angle = math.atan2(y, x)
+            if angle < angle_min or angle > angle_max:
+                continue
+
+            dist = math.sqrt(x * x + y * y + z * z) - 0.32
+
+            # Bin density for pathfinding
+            bin_index = int((angle - angle_min) / bin_width)
+            bin_index = min(max(bin_index, 0), bins - 1)
+            bin_amount[bin_index] += 1.0 / max(dist, 0.1)
+
+            # Only count points in robot's walking path for obstacle distance
+            if is_in_path and dist < min_dist:
+                min_dist = dist
+
+        self.lidar_min_dist = min_dist
+
+        # Find least-dense bin closest to center for safe turning angle
+        min_density = min(bin_amount)
+        candidates = [i for i, val in enumerate(bin_amount) if val == min_density]
+        center = bins // 2
+        best_idx = min(candidates, key=lambda idx: abs(idx - center))
+        self.best_safe_angle = angle_min + (best_idx + 0.5) * bin_width
+
+    # ------------------------------------------------------------------ #
+    #  Control loop                                                       #
+    # ------------------------------------------------------------------ #
+
+    def _control_loop(self):
+        if self.state == IDLE or self.state == COMPLETED:
+            return
+
+        if self.state == E_STOPPED:
+            self._send_velocity(0.0, 0.0)
+            return
+
+        # Check walk distance completion
+        if self.distance_walked >= self.params['walk_distance']:
+            self.state = COMPLETED
+            self._send_velocity(0.0, 0.0)
+            self.get_logger().info(
+                f'Walk completed! Distance: {self.distance_walked:.2f}/{self.params["walk_distance"]:.2f}m'
+            )
+            return
+
+        # --- OBSTACLE_DETOUR ---
+        if self.state == OBSTACLE_DETOUR:
+            if self.lidar_min_dist > self.params['obstacle_dist']:
+                # Obstacle cleared — return to path heading
+                self.locked_angle = self.path_heading
+                self.state = RETURNING_TO_PATH
+                return
+
+            # Turn to safe angle, then creep forward
+            if self.locked_angle is not None:
+                error = self._angle_error(self.locked_angle, self.current_yaw)
+                if abs(error) < 0.15:
+                    # Pointed in safe direction — creep forward
+                    self._send_velocity(self.params['min_speed'], 0.0)
+                else:
+                    ang_z = max(-self.params['max_rotation'],
+                               min(self.params['max_rotation'], error * 1.5))
+                    self._send_velocity(0.0, ang_z)
+            return
+
+        # --- RETURNING_TO_PATH ---
+        if self.state == RETURNING_TO_PATH:
+            error = self._angle_error(self.path_heading, self.current_yaw)
+            if abs(error) < 0.15:
+                self.locked_angle = None
+                self.state = WALKING
+            else:
+                ang_z = max(-self.params['max_rotation'],
+                           min(self.params['max_rotation'], error * 1.5))
+                self._send_velocity(0.0, ang_z)
+            return
+
+        # --- Check for obstacle entering WALKING or PATIENT_FAR ---
+        if self.state in (WALKING, PATIENT_FAR):
+            if self.lidar_min_dist < self.params['obstacle_dist']:
+                self.pre_detour_heading = self.current_yaw
+                self.locked_angle = self.current_yaw + self.best_safe_angle
+                # Normalize locked_angle to [-pi, pi]
+                self.locked_angle = math.atan2(
+                    math.sin(self.locked_angle), math.cos(self.locked_angle)
+                )
+                self.state = OBSTACLE_DETOUR
+                self._send_velocity(0.0, 0.0)
+                return
+
+        # --- WALKING / PATIENT_FAR: UWB-based speed ---
+        speed = self._compute_speed()
+        if speed is None:
+            self.state = PATIENT_FAR
+            self._send_velocity(0.0, 0.0)
+        else:
+            if self.state == PATIENT_FAR and speed > 0:
+                self.state = WALKING
+            self.current_speed = speed
+            self._send_velocity(speed, 0.0)
+
+    # ------------------------------------------------------------------ #
+    #  Helpers                                                            #
+    # ------------------------------------------------------------------ #
+
+    def _start_walk(self):
+        self.start_x = self.odom_x
+        self.start_y = self.odom_y
+        self.distance_walked = 0.0
+        self.path_heading = self.current_yaw
+        self.locked_angle = None
+        self.state = WALKING
+        self.get_logger().info(
+            f'Walk started — target: {self.params["walk_distance"]:.2f}m, '
+            f'heading: {self.path_heading:.2f} rad'
+        )
+
+    def _compute_speed(self):
+        """Return speed based on UWB patient distance, or None for PATIENT_FAR."""
+        if self.patient_distance is None:
+            return self.params['max_speed']
+
+        if self.patient_ahead:
+            return self.params['catchup_speed']
+        elif self.patient_distance < self.params['patient_min_dist']:
+            return 0.0
+        elif self.patient_distance < self.params['patient_close_dist']:
+            return self.params['max_speed']
+        elif self.patient_distance < self.params['patient_max_dist']:
+            return self.params['min_speed']
+        else:
+            return None  # patient too far
+
+    @staticmethod
+    def _angle_error(target, current):
+        """Compute shortest angular error in [-pi, pi]."""
+        error = target - current
+        return (error + math.pi) % (2 * math.pi) - math.pi
+
+    def _send_velocity(self, linear_x, angular_z):
+        msg = Twist()
+        msg.linear.x = float(linear_x)
+        msg.angular.z = float(angular_z)
+        self.cmd_vel_pub.publish(msg)
+        self.current_speed = linear_x
+
+    def _send_sit(self):
+        msg = WebRtcReq()
+        msg.api_id = 1005
+        msg.topic = 'rt/api/sport/request'
+        msg.parameter = ''
+        msg.priority = 0
+        self.webrtc_pub.publish(msg)
+
+    def _send_stand(self):
+        msg = WebRtcReq()
+        msg.api_id = 1004
+        msg.topic = 'rt/api/sport/request'
+        msg.parameter = ''
+        msg.priority = 0
+        self.webrtc_pub.publish(msg)
+
+    # ------------------------------------------------------------------ #
+    #  Logging & status                                                   #
+    # ------------------------------------------------------------------ #
+
+    def _log_status(self):
+        now = time.time()
+        if now - self.last_log_time < 0.5:
+            return
+        self.last_log_time = now
+
+        ts = time.strftime('%H:%M:%S')
+        dist_str = f'{self.distance_walked:.2f}/{self.params["walk_distance"]:.2f}m'
+        uwb_str = f'{self.patient_distance:.2f}m' if self.patient_distance else 'N/A'
+        direction = 'AHEAD' if self.patient_ahead else 'BEHIND'
+        lidar_str = f'{self.lidar_min_dist:.2f}m' if self.lidar_min_dist < 100 else 'clear'
+
+        if self.state == IDLE:
+            print(f'[WALK {ts}] State: IDLE | Waiting for task command...')
+        elif self.state == COMPLETED:
+            print(f'[WALK {ts}] State: COMPLETED | Dist: {dist_str} | Walk finished!')
+        elif self.state == E_STOPPED:
+            print(f'[WALK {ts}] State: E_STOPPED | Dist: {dist_str} | Emergency stop — sitting down')
+        elif self.state == PATIENT_FAR:
+            print(
+                f'[WALK {ts}] State: PATIENT_FAR | Dist: {dist_str} | '
+                f'UWB: {uwb_str} ({direction}) | Speed: 0.00 | LiDAR: {lidar_str} | Waiting...'
+            )
+        elif self.state == OBSTACLE_DETOUR:
+            target = f'{self.locked_angle:.2f}rad' if self.locked_angle is not None else 'N/A'
+            print(
+                f'[WALK {ts}] State: OBSTACLE_DETOUR | Dist: {dist_str} | '
+                f'UWB: {uwb_str} | Speed: {self.current_speed:.2f} | '
+                f'LiDAR: {lidar_str} | Turning to {target}'
+            )
+        elif self.state == RETURNING_TO_PATH:
+            print(
+                f'[WALK {ts}] State: RETURNING_TO_PATH | Dist: {dist_str} | '
+                f'UWB: {uwb_str} | Heading: {self.path_heading:.2f}rad'
+            )
+        else:
+            print(
+                f'[WALK {ts}] State: {self.state} | Dist: {dist_str} | '
+                f'UWB: {uwb_str} ({direction}) | Speed: {self.current_speed:.3f} | '
+                f'LiDAR: {lidar_str} | Heading: {self.current_yaw:.2f}rad'
+            )
+
+    def _publish_status(self):
+        direction = 'AHEAD' if self.patient_ahead else 'BEHIND'
+        status = {
+            'state': self.state,
+            'distance_walked': round(self.distance_walked, 2),
+            'walk_distance': self.params['walk_distance'],
+            'patient_distance': round(self.patient_distance, 2) if self.patient_distance else None,
+            'patient_direction': direction,
+            'speed': round(self.current_speed, 3),
+            'lidar_min_dist': round(self.lidar_min_dist, 2) if self.lidar_min_dist < 100 else None,
+            'heading': round(self.current_yaw, 2),
+        }
+        msg = String()
+        msg.data = json.dumps(status)
+        self.walk_status_pub.publish(msg)
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = PatientWalk()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        node.get_logger().info('Keyboard interrupt — stopping')
+        node._send_velocity(0.0, 0.0)
+    finally:
+        node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()

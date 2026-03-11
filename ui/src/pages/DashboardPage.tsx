@@ -8,6 +8,7 @@ import { TelemetryGraphs } from '../components/TelemetryGraphs'
 import { ControlsCard } from '../components/ControlsCard'
 import { AlertsPanel } from '../components/AlertsPanel'
 import type { Alert } from '../components/AlertsPanel'
+import { TuningCard } from '../components/TuningCard'
 import { TaskHistory } from '../components/TaskHistory'
 import type { TaskRecord } from '../components/TaskHistory'
 import { ROBOTS, API } from '../config'
@@ -153,6 +154,7 @@ export function DashboardPage({ user, token, onLogout }: DashboardPageProps) {
           onTaskCreated={onTaskCreated}
           userName={user.display_name}
         />
+        <TuningCard publish={publish} rosConnected={rosConnected} />
         <AlertsPanel alerts={alerts} />
         <TaskHistory tasks={tasks} />
       </main>

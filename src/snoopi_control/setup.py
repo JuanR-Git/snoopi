@@ -16,6 +16,7 @@ setup(
             'sample_move = snoopi_control.sample_move:main',
             'sit_stand = snoopi_control.sit_stand:main',
 	    'following = snoopi_control.following:main',
+            'patient_walk = snoopi_control.patient_walk:main',
         ],
     },
 )
