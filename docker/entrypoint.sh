@@ -40,7 +40,12 @@ echo "[entrypoint] Starting command_bridge..."
 ros2 run snoopi_command_bridge command_bridge \
     > /ros2_ws/logs/command_bridge.log 2>&1 &
 
-# 4. go2_ros2_sdk driver — managed by watchdog (see below)
+# 4. uwb_reader — reads UWB anchors on /dev/ttyUSB0 and /dev/ttyUSB1
+echo "[entrypoint] Starting uwb_reader..."
+ros2 run snoopi_uwb uwb_reader \
+    > /ros2_ws/logs/uwb_reader.log 2>&1 &
+
+# 5. go2_ros2_sdk driver — managed by watchdog (see below)
 #    The watchdog pings the robot before launching, retries if unreachable,
 #    and restarts the driver if it crashes (WebRTC drops).
 
@@ -112,6 +117,7 @@ echo "  snoopi-ros2 container is running"
 echo "  rosbridge:       ws://localhost:9090"
 echo "  system_monitor:  /snoopi/system_stats"
 echo "  command_bridge:  /snoopi/command"
+echo "  uwb_reader:      /snoopi/uwb_status"
 echo "  robot watchdog:  checks every 10s"
 echo "  Logs:            /ros2_ws/logs/"
 echo "============================================"

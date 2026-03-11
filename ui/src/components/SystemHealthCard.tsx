@@ -9,6 +9,15 @@ interface SystemStats {
   robot_message: string
 }
 
+interface UwbStatus {
+  anchor_1_connected: boolean
+  anchor_2_connected: boolean
+  anchor_1_tag_detected: boolean
+  anchor_2_tag_detected: boolean
+  anchor_1_distance_m: number
+  anchor_2_distance_m: number
+}
+
 interface Props {
   subscribe: <T>(topic: string, msgType: string, callback: (msg: T) => void) => () => void
   piConnected: boolean
@@ -23,8 +32,7 @@ function StatusDot({ online }: { online: boolean }) {
 
 export function SystemHealthCard({ subscribe, piConnected, onCpuUpdate }: Props) {
   const [stats, setStats] = useState<SystemStats | null>(null)
-  const [uwbBase, setUwbBase] = useState(false)
-  const [uwbPatient, setUwbPatient] = useState(false)
+  const [uwb, setUwb] = useState<UwbStatus | null>(null)
 
   useEffect(() => {
     const unsubStats = subscribe<any>('/snoopi/system_stats', 'std_msgs/msg/String', (msg: any) => {
@@ -34,13 +42,12 @@ export function SystemHealthCard({ subscribe, piConnected, onCpuUpdate }: Props)
         onCpuUpdate?.(data.cpu_percent)
       } catch {}
     })
-    const unsubUwbBase = subscribe<any>('/snoopi/uwb_base_status', 'std_msgs/msg/Bool', (msg: any) => {
-      setUwbBase(msg.data)
+    const unsubUwb = subscribe<any>('/snoopi/uwb_status', 'std_msgs/msg/String', (msg: any) => {
+      try {
+        setUwb(JSON.parse(msg.data))
+      } catch {}
     })
-    const unsubUwbPatient = subscribe<any>('/snoopi/uwb_patient_status', 'std_msgs/msg/Bool', (msg: any) => {
-      setUwbPatient(msg.data)
-    })
-    return () => { unsubStats(); unsubUwbBase(); unsubUwbPatient() }
+    return () => { unsubStats(); unsubUwb() }
   }, [subscribe, onCpuUpdate])
 
   return (
@@ -76,17 +83,35 @@ export function SystemHealthCard({ subscribe, piConnected, onCpuUpdate }: Props)
           </span>
         </div>
         <div className="flex justify-between text-sm items-center">
-          <span className="text-slate-600">UWB Base</span>
+          <span className="text-slate-600">USB Anchor 1</span>
           <span className="inline-flex items-center gap-1.5">
-            <StatusDot online={uwbBase} />
-            <span className="font-medium">{uwbBase ? 'Online' : 'Offline'}</span>
+            <StatusDot online={!!uwb?.anchor_1_connected} />
+            <span className="font-medium">{uwb ? (uwb.anchor_1_connected ? 'Connected' : 'Disconnected') : '—'}</span>
           </span>
         </div>
         <div className="flex justify-between text-sm items-center">
-          <span className="text-slate-600">UWB Patient</span>
+          <span className="text-slate-600">USB Anchor 2</span>
           <span className="inline-flex items-center gap-1.5">
-            <StatusDot online={uwbPatient} />
-            <span className="font-medium">{uwbPatient ? 'Online' : 'Offline'}</span>
+            <StatusDot online={!!uwb?.anchor_2_connected} />
+            <span className="font-medium">{uwb ? (uwb.anchor_2_connected ? 'Connected' : 'Disconnected') : '—'}</span>
+          </span>
+        </div>
+        <div className="flex justify-between text-sm items-center">
+          <span className="text-slate-600">Anchor 1 Tag</span>
+          <span className="inline-flex items-center gap-1.5">
+            <StatusDot online={!!uwb?.anchor_1_tag_detected} />
+            <span className="font-medium">
+              {uwb ? (uwb.anchor_1_tag_detected ? `${uwb.anchor_1_distance_m.toFixed(2)} m` : 'Not Detected') : '—'}
+            </span>
+          </span>
+        </div>
+        <div className="flex justify-between text-sm items-center">
+          <span className="text-slate-600">Anchor 2 Tag</span>
+          <span className="inline-flex items-center gap-1.5">
+            <StatusDot online={!!uwb?.anchor_2_tag_detected} />
+            <span className="font-medium">
+              {uwb ? (uwb.anchor_2_tag_detected ? `${uwb.anchor_2_distance_m.toFixed(2)} m` : 'Not Detected') : '—'}
+            </span>
           </span>
         </div>
       </div>

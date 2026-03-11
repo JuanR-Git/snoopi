@@ -17,6 +17,9 @@ services:
       # │  Expected: 192.168.123.161 (verify with arp -a)        │
       # └─────────────────────────────────────────────────────────┘
       - ROBOT_IP=192.168.123.161
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0
+      - /dev/ttyUSB1:/dev/ttyUSB1
     volumes:
       # Your ROS2 node source code — edit on host, build inside container
       - ./src:/ros2_ws/src

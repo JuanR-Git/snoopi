@@ -29,3 +29,4 @@ numpy==1.26.4
 psutil
 requests
 cryptography
+pyserial

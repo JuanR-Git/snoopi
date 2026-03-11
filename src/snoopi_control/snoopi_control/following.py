@@ -1,6 +1,6 @@
 #Autonomous walking with obstacle detection
 #this is one of the final drafts of the project we want to use. it focuses on the movement of the robot using lidar PointCloud for obstacle detection
-#Last Modified: Mar 9th
+#Last Modified: Mar 10th
 #Author: Mihir Patel and John Mann
 
 #!/usr/bin/env python3
@@ -9,7 +9,7 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
-from sensor_msgs.msg import PointCloud2, BatteryState  #adding this to read sensor data for obstacle detection
+from sensor_msgs.msg import PointCloud2
 import time
 import sensor_msgs_py.point_cloud2 as pc2
 from rcl_interfaces.srv import SetParameters
@@ -19,16 +19,7 @@ from tf2_ros import Buffer, TransformListener
 from tf2_sensor_msgs.tf2_sensor_msgs import do_transform_cloud
 import json
 from nav_msgs.msg import Odometry
-import asyncio
-import threading
-from go2_webrtc_connect import Go2WebRTCConnection, WebRTCConnectionMethod
-
-import os
-import subprocess
-
-import serial
-import re
-from datetime import datetime
+from std_msgs.msg import String
 
 #adding constants to reprersent states for state machine
 FORWARD = "forward"
@@ -39,7 +30,7 @@ FORWARD_SAFE = "forward_safe"
 STOPPED_SAFE = "stopped_safe"
 state = STOPPED
 turning_start = None
-TURN_MIN_TIME = 0.10 #turn at least 0.1 seconds 
+TURN_MIN_TIME = 0.10 #turn at least 0.1 seconds
 TURN_MAX_TIME = 1.0 #make sure it doesnt turn forever
 OBSTACLE_DIST = 0.75 #0.75
 OBSTACLE_DIST_SAFE = 0.50
@@ -48,142 +39,12 @@ TURN_SPEED = 0.7
 TURN_DURATION = math.radians(TURN_ANGLE_DEG) / TURN_SPEED
 
 
-class Following(Node):   # or Following(Node) if you are in ROS2 and import Node
-    # Regex is constant, can live at class level
-    DIST_RE = re.compile(r"distance\[cm\]=(-?\d+)")
-
-    def __init__(self, ports=None, baudrate=115200, base=30):
-        # --- CONFIGURATION ---
-        # Allow overriding from outside
-        self.PORTS = ports or {
-            "anchor_1": "/dev/ttyUSB0",
-            "anchor_2": "/dev/ttyUSB1",
-        }
-        self.BAUDRATE = baudrate
-        self.base = base  # distance between anchors in cm
-        self.dist = None
-
-        # Per‑instance state
-        self.latest_ranges = {}
-        self.data_lock = threading.Lock()
-        self._threads = []
-        self._stop_event = threading.Event()
-
-    def reader(self, name, port):
-        """Thread function: read one serial port and update latest_ranges."""
-        try:
-            ser = serial.Serial(port, self.BAUDRATE, timeout=1)
-            print(f"[*] Started listening to {name} on {port}")
-        except Exception as e:
-            print(f"[!] Could not open {port}: {e}")
-            return
-
-        while not self._stop_event.is_set():
-            try:
-                line = ser.readline().decode(errors="ignore").strip()
-                if not line:
-                    continue
-
-                m = self.DIST_RE.search(line)
-                if m:
-                    dist_cm = int(m.group(1))
-                    with self.data_lock:
-                        self.latest_ranges[name] = {
-                            "time": datetime.now().strftime("%H:%M:%S"),
-                            "dist": dist_cm,
-                            "raw": line,
-                        }
-            except Exception as e:
-                print(f"[!] Error reading {name}: {e}")
-                break
-
-        ser.close()
-        print(f"[*] Stopped listening to {name}")
-
-    def start_readers(self):
-        """Spawn reader threads for all configured ports."""
-        for name, port in self.PORTS.items():
-            t = threading.Thread(
-                target=self.reader,
-                args=(name, port),
-                daemon=True
-            )
-            t.start()
-            self._threads.append(t)
-
-    def stop(self):
-        """Signal threads to stop and wait for them."""
-        self._stop_event.set()
-        for t in self._threads:
-            t.join(timeout=1.0)
-
-    def run_monitor(self):
-        """Main monitoring loop: prints distances and triangulated X/Y."""
-        self.start_readers()
-
-        print("--- UWB Distance Monitor ---")
-        print("Press Ctrl+C to stop.\n")
-
-        try:
-            while True:
-                print(f"\r[{datetime.now().strftime('%H:%M:%S')}] Monitoring...", end="")
-
-                with self.data_lock:
-                    if len(self.latest_ranges) >= 2:
-                        print("\n" + "-" * 50)
-                        (name1, data1), (name2, data2) = list(self.latest_ranges.items())[:2]
-
-                        status1 = "OK" if data1["dist"] > 0 else "INVALID/NEG"
-                        print(
-                            f"{name1.upper():<10} | Dist: {data1['dist']:>4} cm | "
-                            f"Status: {status1:<10} | Last Update: {data1['time']}"
-                        )
-
-                        status2 = "OK" if data2["dist"] > 0 else "INVALID/NEG"
-                        print(
-                            f"{name2.upper():<10} | Dist: {data2['dist']:>4} cm | "
-                            f"Status: {status2:<10} | Last Update: {data2['time']}"
-                        )
-
-                        # Absolute distance triangulation
-                        d1 = data1["dist"]
-                        d2 = data2["dist"]
-                        base = self.base
-
-                        x = (d1**2 - d2**2 + base**2) / (2 * base)
-                        y = math.sqrt(abs(d1**2 - x**2))
-
-                        x_center = x - base / 2.0
-                        y_center = y
-                        r_center = (math.sqrt(x_center**2 + y_center**2)) / 100 ###turn to m as well
-
-                        print(f"Target is at X: {x:.2f} cm, Y: {y:.2f} cm")
-                    
-                        if len(q) < 11:
-                            q.append(r_center)
-                            print(f"Waiting for more values...")
-                        else:
-                            q.pop(0)
-                            q.append(r_center)
-                            self.dist= sum(q)/len(q)
-                            print(f"Target (center frame) {self.dist:.2f}m")
-
-                time.sleep(0.1)
-        except KeyboardInterrupt:
-            print("\nStopping monitor...")
-        finally:
-            self.stop()
-
-
-
-
-
 ##########################3claass to dtereming wht to do with dat input from lidar viewer
 
 class ObstacleDetection(Node):
-    def __init__(self, lidar_viewer, following_dist):
+    def __init__(self, lidar_viewer):
         self.lidar = lidar_viewer
-        self.follow_dist = following_dist
+        self.uwb_distance = None
         self.obstacle_detected_left = False
         self.obstacle_detected_right = False
         self.obstacle_detected_front = False
@@ -192,25 +53,41 @@ class ObstacleDetection(Node):
         self.cli = self.create_client(SetParameters, '/go2_driver_node/set_parameters')
         while not self.cli.wait_for_service(timeout_sec=1.0):
             self.get_logger().info('Waiting for /go2_driver_node/set_parameters service...')
-        
-    #detectinh with state machine    
+
+        # Subscribe to UWB status from snoopi_uwb node
+        self.create_subscription(
+            String,
+            '/snoopi/uwb_status',
+            self._uwb_callback,
+            10
+        )
+
+    def _uwb_callback(self, msg):
+        try:
+            data = json.loads(msg.data)
+            dist = data.get('triangulated_distance_m', -1)
+            self.uwb_distance = dist if dist > 0 else None
+        except (json.JSONDecodeError, KeyError):
+            self.uwb_distance = None
+
+    #detectinh with state machine
     def detect_obstacle(self):
         #rclpy.spin_once(self.lidar, timeout_sec=0.05) ##have to call self.lidar to get the new value for min_dist
         global state
         self.obstacle_detected_left = False
         self.obstacle_detected_right = False
-       
+
         # use the atan2 to figure out if the obstacle is on thr right or left side
         # alse used for the maxc point to determine which way to turn if obstacle is right in front
         #####replacing angle with constant y values
-        if self.lidar.min_dist < OBSTACLE_DIST: 
+        if self.lidar.min_dist < OBSTACLE_DIST:
             print(self.lidar.min_dist)
             state = TURNING
             #cur_angle = math.atan2(self.lidar.y, self.lidar.x)
             #if cur_angle > 0.2:
             if self.lidar.y < 0.12 and self.lidar.y >=0:
                 self.obstacle_detected_left = True
-            #elif cur_angle < -0.2:     
+            #elif cur_angle < -0.2:
             elif self.lidar.y > -0.16 and self.lidar.y < 0:
                 self.obstacle_detected_right = True
             else: #obstacle is in front, decide to turn left or right
@@ -220,11 +97,13 @@ class ObstacleDetection(Node):
                     self.obstacle_detected_right = True
                 else:
                     self.obstacle_detected_left = True
-        elif self.follow_dist.dist < 1.25: 
+        elif self.uwb_distance is not None and self.uwb_distance < 0.2:
+            state = STOPPED                    # too close — stop
+        elif self.uwb_distance is not None and self.uwb_distance < 1.25:
             if state != STOPPED_SAFE and state != FORWARD_SAFE:
-                state = FORWARD
-        elif self.follow_dist.dist < 0.2:
-            state = STOPPED
+                state = FORWARD                # in following range — walk
+        else:
+            state = STOPPED                    # too far or no UWB data — wait
 
 
 #########################lidar viewer class to read sensor values output information to other clases
@@ -262,9 +141,9 @@ class LidarViewer(Node):
             qos
         )
         self.subscription
-    
+
     def pointcloud_callback(self, msg):
-        #need to recall these to reset the variables for the distance checks, else it will be the same min and max foprever 
+        #need to recall these to reset the variables for the distance checks, else it will be the same min and max foprever
         self.min_dist = float('inf')#min dist to detect object
         self.max_dist = -float('inf')#max dist to find availabl path to turn
         self.x = float('inf')
@@ -281,7 +160,7 @@ class LidarViewer(Node):
         except Exception as e:
             self.get_logger().warn(f"TF transform failed: {e}")
             return
-        
+
         # Transform into base_link
         cloud = do_transform_cloud(msg, transform)   #converting point cloud data into xyz coordinates
         obstacle_detected = False
@@ -302,7 +181,7 @@ class LidarViewer(Node):
             if x <= 0:
                 continue  # keep only objects in front
 
-            
+
             angle_lim = math.radians(45) #30 deg range of viewing in front
             # if (abs(math.atan2(y,x))) > angle_lim :
             #     continue
@@ -320,26 +199,25 @@ class LidarViewer(Node):
                  self.cur_angle = math.atan2(y, x)
 
             #self.target_angle = math.atan2(y, x)
-            
+
             if self.target_angle < angle_min or self.target_angle > angle_max:
                 continue
 
             bin_index = int((self.target_angle - angle_min) / bin_width)
             bin_index = min(max(bin_index, 0), bins - 1)
-            
-            
+
 
             dist = math.sqrt(x*x + y*y + z*z) - 0.32
             bin_amount[bin_index] += 1.0 / max(dist, 0.1)
-            
-            
+
+
             if dist < self.min_dist:
                 self.min_dist = dist####seems like the 0.32 is detected even when touching the lidar
                 closest_point = (x, y, z)
                 self.x = closest_point[0]   ### for some reason this is not the same as x??? using this to extract the correct value
                 self.y = closest_point[1]
                 # z_val = closest_point[2]
-                
+
             if dist > self.max_dist:
                 furthest_point = (x, y, z)
                 self.max_dist = dist
@@ -397,7 +275,7 @@ class Go2Mover(Node):
     def move(self):
         #end_time = self.get_clock().now().nanoseconds / 1e9 + duration
         msg = Twist()
-        
+
         global state, turning_start
 
         while rclpy.ok():# and self.get_clock().now().nanoseconds / 1e9 < end_time:
@@ -418,7 +296,7 @@ class Go2Mover(Node):
 
             elif state == STOPPED:
                 self.locked_angle = None
-                msg.linear.x = 0.0 
+                msg.linear.x = 0.0
                 msg.linear.y = 0.0
                 msg.angular.z = 0.0
 
@@ -487,64 +365,46 @@ class Go2Mover(Node):
                    msg.linear.x = 0.0
                    state = STOPPED
                 self.publisher_.publish(msg)
-                
-            
+
+
             self.publisher_.publish(msg)
-            
+
 def main(args=None):
 
     print("SNOOPI Starting...")
-
-
-
-    #asyncio.run(sit_down())
 
     print("Moving on...")
 
     rclpy.init(args=args)
     lidar = LidarViewer()
-    follower = Following()
-    obs_det = ObstacleDetection(lidar, follower)
+    obs_det = ObstacleDetection(lidar)
     mover = Go2Mover(obs_det)
-    
+
     executor = MultiThreadedExecutor()
     executor.add_node(lidar)
-    executor.add_node(follower)
     executor.add_node(obs_det)
     executor.add_node(mover)
 
     try:
-        #param.set_obstacle_avoidance(False)
-        # Step forward
         import threading
         move_thread = threading.Thread(target=mover.move, daemon=True)
         move_thread.start()
         executor.spin()
-        # Old code below
-        # mover.get_logger().info('Moving forward...')
-        # mover.move()
-        # Old code ends
-        #mover.move(linear_x = 0.0, linear_y=0.0, angular_z = 1.5, duration=1.375)  code for 90 deg turn
 
     except KeyboardInterrupt:
         #making sure the dog stops moving before shutdown
         state = STOPPED  #redudunt call since there is already a keyyboard interupt in the move
-        #param.set_obstacle_avoidance(False)
         print("Keyboard Interrupt")
-    
-    
-    #param.set_obstacle_avoidance(False)
-    
+
     mover.get_logger().info('Movement demo complete.')
 
     mover.destroy_node()
     obs_det.destroy_node()
     lidar.destroy_node()
-    
+
 
     if rclpy.ok():
         rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
-
