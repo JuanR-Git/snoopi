@@ -103,6 +103,14 @@ class PatientWalk(Node):
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
 
+        # --- LiDAR diagnostics ---
+        self.pc_recv_count = 0        # total pointcloud messages received
+        self.pc_tf_fail_count = 0     # TF lookup failures
+        self.pc_processed_count = 0   # successfully processed
+        self.pc_path_points = 0       # points in walking path (last scan)
+        self.pc_total_points = 0      # total forward points (last scan)
+        self.pc_frame_id = ''         # frame_id of point cloud
+
         # --- Odom state ---
         self.odom_x = 0.0
         self.odom_y = 0.0
@@ -218,7 +226,21 @@ class PatientWalk(Node):
             self.get_logger().warn(f'Invalid task_command: {e}')
 
     def _pointcloud_callback(self, msg):
-        """LiDAR processing — adapted from LidarViewer in following.py."""
+        """LiDAR processing — adapted from LidarViewer in following.py.
+
+        Diagnostic counters track each failure mode so the log shows
+        exactly why obstacle detection might not be working.
+        """
+        self.pc_recv_count += 1
+
+        # Log frame_id on first receipt
+        if not self.pc_frame_id:
+            self.pc_frame_id = msg.header.frame_id
+            self.get_logger().info(
+                f'LiDAR: first point cloud received — frame_id="{msg.header.frame_id}"'
+            )
+
+        # TF lookup — log failures instead of silently returning
         try:
             transform = self.tf_buffer.lookup_transform(
                 'base_link',
@@ -226,7 +248,13 @@ class PatientWalk(Node):
                 rclpy.time.Time(),
                 timeout=rclpy.duration.Duration(seconds=0.1),
             )
-        except Exception:
+        except Exception as e:
+            self.pc_tf_fail_count += 1
+            if self.pc_tf_fail_count <= 3 or self.pc_tf_fail_count % 50 == 0:
+                self.get_logger().warn(
+                    f'LiDAR TF failed ({self.pc_tf_fail_count}x): '
+                    f'"{msg.header.frame_id}" -> "base_link": {e}'
+                )
             return
 
         cloud = do_transform_cloud(msg, transform)
@@ -238,17 +266,31 @@ class PatientWalk(Node):
         bin_amount = [0.0001] * bins
         bin_width = (angle_max - angle_min) / bins
 
+        # Diagnostic counters for this scan
+        total_points = 0
+        forward_points = 0
+        z_pass_points = 0
+        path_points = 0
+
         for x, y, z in pc2.read_points(cloud, field_names=('x', 'y', 'z'), skip_nans=True):
+            total_points += 1
+
             if x <= 0:
                 continue
+            forward_points += 1
 
             is_in_path = (-0.16 <= y <= 0.12)
             is_in_vision = (-1.0 <= y <= 1.0)
 
             if not is_in_vision:
                 continue
-            if z <= -0.1 or z >= 0.1:
+
+            # Z-filter: keep points near robot body height.
+            # Widened from [-0.1, 0.1] to [-0.25, 0.25] to catch low obstacles
+            # (boxes, legs) that were being filtered out.
+            if z <= -0.25 or z >= 0.25:
                 continue
+            z_pass_points += 1
 
             angle = math.atan2(y, x)
             if angle < angle_min or angle > angle_max:
@@ -264,8 +306,21 @@ class PatientWalk(Node):
             # Only count points in robot's walking path for obstacle distance
             if is_in_path and dist < min_dist:
                 min_dist = dist
+                path_points += 1
 
         self.lidar_min_dist = min_dist
+        self.pc_total_points = forward_points
+        self.pc_path_points = path_points
+        self.pc_processed_count += 1
+
+        # Log first successful scan with point counts for debugging
+        if self.pc_processed_count == 1:
+            self.get_logger().info(
+                f'LiDAR: first scan processed — '
+                f'total={total_points}, forward={forward_points}, '
+                f'z_pass={z_pass_points}, path={path_points}, '
+                f'min_dist={min_dist:.2f}m'
+            )
 
         # Find least-dense bin closest to center for safe turning angle
         min_density = min(bin_amount)
@@ -341,8 +396,6 @@ class PatientWalk(Node):
                 return
 
         # --- WALKING / PATIENT_FAR: UWB distance-only speed control ---
-        # Direction detection disabled — noise (+/-0.35m) exceeds sensor
-        # spacing (0.30m), making front/back determination unreliable.
         speed = self._compute_speed()
         if speed is None:
             self.state = PATIENT_FAR
@@ -432,11 +485,24 @@ class PatientWalk(Node):
         ts = time.strftime('%H:%M:%S')
         dist_str = f'{self.distance_walked:.2f}/{self.params["walk_distance"]:.2f}m'
         uwb_str = f'{self.patient_distance:.2f}m' if self.patient_distance else 'N/A'
-        lidar_str = f'{self.lidar_min_dist:.2f}m' if self.lidar_min_dist < 100 else 'clear'
         uwb_hz = f'{self.uwb_rate_hz:.1f}Hz'
 
+        # LiDAR diagnostic string
+        if self.pc_recv_count == 0:
+            lidar_str = 'NO_DATA'
+        elif self.pc_tf_fail_count > 0 and self.pc_processed_count == 0:
+            lidar_str = f'TF_FAIL({self.pc_tf_fail_count}x)'
+        elif self.lidar_min_dist < 100:
+            lidar_str = f'{self.lidar_min_dist:.2f}m({self.pc_path_points}pts)'
+        else:
+            lidar_str = f'clear({self.pc_total_points}fwd,{self.pc_path_points}path)'
+
         if self.state == IDLE:
-            print(f'[WALK {ts}] State: IDLE | Waiting for task command...')
+            print(
+                f'[WALK {ts}] State: IDLE | LiDAR: {lidar_str} | '
+                f'PC: recv={self.pc_recv_count} ok={self.pc_processed_count} '
+                f'tf_fail={self.pc_tf_fail_count} | Waiting for task command...'
+            )
         elif self.state == COMPLETED:
             print(f'[WALK {ts}] State: COMPLETED | Dist: {dist_str} | Walk finished!')
         elif self.state == E_STOPPED:
