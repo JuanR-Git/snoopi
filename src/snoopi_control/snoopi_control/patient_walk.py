@@ -16,11 +16,20 @@ State machine:
 
   Any state -> E_STOPPED  (on /snoopi/estop -> sit down, zero velocity)
   E_STOPPED -> IDLE       (on /snoopi/command "stand" -> stand up)
+
+UWB notes:
+  - Sensor spacing is ~30cm, noise is +/-35cm per anchor.
+  - Combined noise on anchor difference is +/-70cm, which exceeds the
+    30cm spacing, so front/back direction detection is unreliable.
+  - Direction detection is DISABLED — speed is based purely on
+    triangulated distance.
+  - A rolling average (5 samples) smooths out noise on distance readings.
 """
 
 import math
 import json
 import time
+from collections import deque
 
 import rclpy
 from rclpy.node import Node
@@ -43,19 +52,23 @@ RETURNING_TO_PATH = 'RETURNING_TO_PATH'
 COMPLETED = 'COMPLETED'
 E_STOPPED = 'E_STOPPED'
 
-# Default tunable parameters
+# Default tunable parameters — calibrated for UWB with +/-0.35m noise
+# Beside robot = ~1.0m, two steps away = ~2.2m
 DEFAULT_PARAMS = {
-    'obstacle_dist': 0.40,
-    'obstacle_dist_safe': 0.30,
-    'patient_max_dist': 2.0,
-    'patient_min_dist': 0.3,
-    'patient_close_dist': 1.25,
-    'max_speed': 0.325,
-    'min_speed': 0.15,
-    'catchup_speed': 0.4,
-    'max_rotation': 0.7,
-    'walk_distance': 2.13,
+    'obstacle_dist': 0.40,        # LiDAR trigger distance
+    'obstacle_dist_safe': 0.30,   # stricter threshold during detour
+    'patient_max_dist': 2.0,      # stop if patient farther than this
+    'patient_min_dist': 0.5,      # stop if patient closer than this
+    'patient_close_dist': 1.5,    # normal range upper bound
+    'max_speed': 0.25,            # normal forward speed
+    'min_speed': 0.10,            # slow speed when patient borderline
+    'catchup_speed': 0.25,        # disabled (same as max) — direction unreliable
+    'max_rotation': 0.7,          # max angular velocity for turns
+    'walk_distance': 2.13,        # target path length
 }
+
+# Rolling average window for UWB distance smoothing
+UWB_SMOOTH_WINDOW = 5
 
 
 class PatientWalk(Node):
@@ -78,10 +91,11 @@ class PatientWalk(Node):
         self.pre_detour_heading = 0.0
 
         # --- UWB state ---
-        self.patient_distance = None  # triangulated distance in meters
-        self.patient_ahead = False    # True if patient is in front of robot
-        self.anchor_1_dist = None
-        self.anchor_2_dist = None
+        self.patient_distance = None  # smoothed triangulated distance
+        self.uwb_raw_buffer = deque(maxlen=UWB_SMOOTH_WINDOW)
+        self.uwb_update_count = 0     # count for rate tracking
+        self.uwb_rate_time = time.time()
+        self.uwb_rate_hz = 0.0
 
         # --- LiDAR state (integrated from LidarViewer) ---
         self.lidar_min_dist = float('inf')
@@ -149,18 +163,19 @@ class PatientWalk(Node):
         try:
             data = json.loads(msg.data)
             dist = data.get('triangulated_distance_m', -1)
-            self.patient_distance = dist if dist > 0 else None
+            if dist > 0:
+                self.uwb_raw_buffer.append(dist)
+                # Rolling average for smoothing
+                self.patient_distance = sum(self.uwb_raw_buffer) / len(self.uwb_raw_buffer)
 
-            a1 = data.get('anchor_1_distance_m')
-            a2 = data.get('anchor_2_distance_m')
-            if a1 is not None and a2 is not None:
-                self.anchor_1_dist = a1
-                self.anchor_2_dist = a2
-                diff = a1 - a2
-                if abs(diff) > 0.1:
-                    # anchor_1 (front) < anchor_2 (rear) => patient is in front
-                    self.patient_ahead = diff < 0
-                # else: within noise, keep previous direction
+            # Track UWB update rate
+            self.uwb_update_count += 1
+            now = time.time()
+            elapsed = now - self.uwb_rate_time
+            if elapsed >= 2.0:
+                self.uwb_rate_hz = self.uwb_update_count / elapsed
+                self.uwb_update_count = 0
+                self.uwb_rate_time = now
         except (json.JSONDecodeError, KeyError, TypeError):
             pass
 
@@ -325,7 +340,9 @@ class PatientWalk(Node):
                 self._send_velocity(0.0, 0.0)
                 return
 
-        # --- WALKING / PATIENT_FAR: UWB-based speed ---
+        # --- WALKING / PATIENT_FAR: UWB distance-only speed control ---
+        # Direction detection disabled — noise (+/-0.35m) exceeds sensor
+        # spacing (0.30m), making front/back determination unreliable.
         speed = self._compute_speed()
         if speed is None:
             self.state = PATIENT_FAR
@@ -346,6 +363,7 @@ class PatientWalk(Node):
         self.distance_walked = 0.0
         self.path_heading = self.current_yaw
         self.locked_angle = None
+        self.uwb_raw_buffer.clear()
         self.state = WALKING
         self.get_logger().info(
             f'Walk started — target: {self.params["walk_distance"]:.2f}m, '
@@ -353,13 +371,17 @@ class PatientWalk(Node):
         )
 
     def _compute_speed(self):
-        """Return speed based on UWB patient distance, or None for PATIENT_FAR."""
+        """Return speed based on smoothed UWB distance, or None for PATIENT_FAR.
+
+        Speed zones (distance-only, direction detection disabled):
+          0 ── patient_min_dist ── patient_close_dist ── patient_max_dist ──→
+           STOP      max_speed           min_speed            STOP (FAR)
+        """
         if self.patient_distance is None:
+            # No UWB data — walk at max_speed (patient might not have tag on yet)
             return self.params['max_speed']
 
-        if self.patient_ahead:
-            return self.params['catchup_speed']
-        elif self.patient_distance < self.params['patient_min_dist']:
+        if self.patient_distance < self.params['patient_min_dist']:
             return 0.0
         elif self.patient_distance < self.params['patient_close_dist']:
             return self.params['max_speed']
@@ -410,8 +432,8 @@ class PatientWalk(Node):
         ts = time.strftime('%H:%M:%S')
         dist_str = f'{self.distance_walked:.2f}/{self.params["walk_distance"]:.2f}m'
         uwb_str = f'{self.patient_distance:.2f}m' if self.patient_distance else 'N/A'
-        direction = 'AHEAD' if self.patient_ahead else 'BEHIND'
         lidar_str = f'{self.lidar_min_dist:.2f}m' if self.lidar_min_dist < 100 else 'clear'
+        uwb_hz = f'{self.uwb_rate_hz:.1f}Hz'
 
         if self.state == IDLE:
             print(f'[WALK {ts}] State: IDLE | Waiting for task command...')
@@ -422,7 +444,7 @@ class PatientWalk(Node):
         elif self.state == PATIENT_FAR:
             print(
                 f'[WALK {ts}] State: PATIENT_FAR | Dist: {dist_str} | '
-                f'UWB: {uwb_str} ({direction}) | Speed: 0.00 | LiDAR: {lidar_str} | Waiting...'
+                f'UWB: {uwb_str} ({uwb_hz}) | Speed: 0.00 | LiDAR: {lidar_str} | Waiting...'
             )
         elif self.state == OBSTACLE_DETOUR:
             target = f'{self.locked_angle:.2f}rad' if self.locked_angle is not None else 'N/A'
@@ -439,21 +461,20 @@ class PatientWalk(Node):
         else:
             print(
                 f'[WALK {ts}] State: {self.state} | Dist: {dist_str} | '
-                f'UWB: {uwb_str} ({direction}) | Speed: {self.current_speed:.3f} | '
+                f'UWB: {uwb_str} ({uwb_hz}) | Speed: {self.current_speed:.3f} | '
                 f'LiDAR: {lidar_str} | Heading: {self.current_yaw:.2f}rad'
             )
 
     def _publish_status(self):
-        direction = 'AHEAD' if self.patient_ahead else 'BEHIND'
         status = {
             'state': self.state,
             'distance_walked': round(self.distance_walked, 2),
             'walk_distance': self.params['walk_distance'],
             'patient_distance': round(self.patient_distance, 2) if self.patient_distance else None,
-            'patient_direction': direction,
             'speed': round(self.current_speed, 3),
             'lidar_min_dist': round(self.lidar_min_dist, 2) if self.lidar_min_dist < 100 else None,
             'heading': round(self.current_yaw, 2),
+            'uwb_rate_hz': round(self.uwb_rate_hz, 1),
         }
         msg = String()
         msg.data = json.dumps(status)
