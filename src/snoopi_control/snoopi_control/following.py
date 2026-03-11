@@ -32,8 +32,8 @@ state = STOPPED
 turning_start = None
 TURN_MIN_TIME = 0.10 #turn at least 0.1 seconds
 TURN_MAX_TIME = 1.0 #make sure it doesnt turn forever
-OBSTACLE_DIST = 0.75 #0.75
-OBSTACLE_DIST_SAFE = 0.50
+OBSTACLE_DIST = 0.40 # reduced from 0.75 for narrow hallway testing
+OBSTACLE_DIST_SAFE = 0.30
 TURN_ANGLE_DEG = 15.0
 TURN_SPEED = 0.7
 TURN_DURATION = math.radians(TURN_ANGLE_DEG) / TURN_SPEED
@@ -211,18 +211,19 @@ class LidarViewer(Node):
             bin_amount[bin_index] += 1.0 / max(dist, 0.1)
 
 
-            if dist < self.min_dist:
-                self.min_dist = dist####seems like the 0.32 is detected even when touching the lidar
+            # Only count points in the robot's walking path for obstacle detection
+            # Side walls (outside is_in_path) are used for pathfinding bins only
+            if is_in_path and dist < self.min_dist:
+                self.min_dist = dist
                 closest_point = (x, y, z)
-                self.x = closest_point[0]   ### for some reason this is not the same as x??? using this to extract the correct value
+                self.x = closest_point[0]
                 self.y = closest_point[1]
-                # z_val = closest_point[2]
 
             if dist > self.max_dist:
                 furthest_point = (x, y, z)
                 self.max_dist = dist
                 self.x_max = furthest_point[0]
-                self.y_max = furthest_point[1] #point of farthest obstacle ### may need to turn into avrage to get more accurate values
+                self.y_max = furthest_point[1]
 
         # Find the minimum density value
         min_density = min(bin_amount)
