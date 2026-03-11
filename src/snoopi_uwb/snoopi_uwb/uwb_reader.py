@@ -22,8 +22,8 @@ import serial
 DIST_RE = re.compile(r"distance\[cm\]=(-?\d+)")
 
 ANCHOR_PORTS = {
-    "anchor_1": "/dev/ttyUSB0",
-    "anchor_2": "/dev/ttyUSB1",
+    "anchor_1": "/dev/ttyACM0",
+    "anchor_2": "/dev/ttyACM1",
 }
 BAUDRATE = 115200
 BASE_CM = 30  # distance between anchors in cm
