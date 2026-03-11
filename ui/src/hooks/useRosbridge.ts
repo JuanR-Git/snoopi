@@ -39,7 +39,7 @@ export function useRosbridge(url: string): RosbridgeHook {
   const publish = useCallback((topic: string, msgType: string, msg: object) => {
     if (!rosRef.current) return
     const t = new ROSLIB.Topic({ ros: rosRef.current, name: topic, messageType: msgType })
-    t.publish(new ROSLIB.Message(msg))
+    t.publish(msg as ROSLIB.Message)
   }, [])
 
   return { connected, subscribe, publish }
