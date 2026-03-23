@@ -41,6 +41,8 @@ from std_msgs.msg import String, Bool
 from go2_interfaces.msg import WebRtcReq
 from tf2_ros import Buffer, TransformListener
 from tf2_sensor_msgs.tf2_sensor_msgs import do_transform_cloud
+from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
 import sensor_msgs_py.point_cloud2 as pc2
 
 # States
@@ -127,6 +129,8 @@ class PatientWalk(Node):
         self.webrtc_pub = self.create_publisher(WebRtcReq, '/webrtc_req', 10)
         self.walk_status_pub = self.create_publisher(String, '/snoopi/walk_status', 10)
 
+        self.lidar_cb_group = ReentrantCallbackGroup()
+
         # --- Subscribers ---
         lidar_qos = QoSProfile(
             history=HistoryPolicy.KEEP_LAST,
@@ -134,7 +138,7 @@ class PatientWalk(Node):
             reliability=ReliabilityPolicy.BEST_EFFORT,
             durability=DurabilityPolicy.VOLATILE,
         )
-        self.create_subscription(PointCloud2, '/point_cloud2', self._pointcloud_callback, lidar_qos)
+        self.create_subscription(PointCloud2, '/point_cloud2', self._pointcloud_callback, lidar_qos, callback_group=self.lidar_cb_group)
         self.create_subscription(Odometry, '/odom', self._odom_callback, 10)
         self.create_subscription(String, '/snoopi/uwb_status', self._uwb_callback, 10)
         self.create_subscription(Bool, '/snoopi/estop', self._estop_callback, 10)
@@ -246,7 +250,7 @@ class PatientWalk(Node):
         exactly why obstacle detection might not be working.
         """
         self.pc_recv_count += 1
-
+        #print(self.pc_recv_count)
         # Log frame_id on first receipt
         if not self.pc_frame_id:
             self.pc_frame_id = msg.header.frame_id
@@ -566,15 +570,20 @@ class PatientWalk(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = PatientWalk()
+    executor = MultiThreadedExecutor()
+    executor.add_node(node)
     try:
-        rclpy.spin(node)
+        executor.spin()
     except KeyboardInterrupt:
         node.get_logger().info('Keyboard interrupt — stopping')
         node._send_velocity(0.0, 0.0)
     finally:
+        executor.shutdown()
         node.destroy_node()
-        if rclpy.ok():
-            rclpy.shutdown()
+        rclpy.shutdown()
+        # node.destroy_node()
+        # if rclpy.ok():
+        #     rclpy.shutdown()
 
 
 if __name__ == '__main__':
