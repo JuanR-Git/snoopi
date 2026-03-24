@@ -17,6 +17,7 @@ setup(
             'sit_stand = snoopi_control.sit_stand:main',
 	    'following = snoopi_control.following:main',
             'patient_walk = snoopi_control.patient_walk:main',
+            'basic_mover = snoopi_control.basic_mover:main',
         ],
     },
 )

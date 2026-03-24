@@ -352,9 +352,12 @@ class PatientWalk(Node):
     # ------------------------------------------------------------------ #
 
     def _control_loop(self):
+
+        # Check for no movement states
         if self.state == IDLE or self.state == COMPLETED:
             return
-
+        
+        # Check if E-Stop pressed
         if self.state == E_STOPPED:
             self._send_velocity(0.0, 0.0)
             return
