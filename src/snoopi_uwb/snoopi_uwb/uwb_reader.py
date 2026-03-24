@@ -27,10 +27,10 @@ ANCHOR_PORTS = {
 }
 BAUDRATE = 115200
 BASE_CM = 30  # distance between anchors in cm
-PUBLISH_INTERVAL = 0.5  # seconds
+PUBLISH_INTERVAL = 0.1  # seconds
 STALE_TIMEOUT = 3.0  # seconds before marking tag as not detected
 RETRY_INTERVAL = 2.0  # seconds between reconnection attempts
-ROLLING_WINDOW = 10
+ROLLING_WINDOW = 3
 
 
 class AnchorState:

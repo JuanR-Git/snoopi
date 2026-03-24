@@ -41,6 +41,8 @@ from std_msgs.msg import String, Bool
 from go2_interfaces.msg import WebRtcReq
 from tf2_ros import Buffer, TransformListener
 from tf2_sensor_msgs.tf2_sensor_msgs import do_transform_cloud
+from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
 import sensor_msgs_py.point_cloud2 as pc2
 
 # States
@@ -55,20 +57,20 @@ E_STOPPED = 'E_STOPPED'
 # Default tunable parameters — calibrated for UWB with +/-0.35m noise
 # Beside robot = ~1.0m, two steps away = ~2.2m
 DEFAULT_PARAMS = {
-    'obstacle_dist': 0.40,        # LiDAR trigger distance
+    'obstacle_dist': 0.10,        # LiDAR trigger distance
     'obstacle_dist_safe': 0.30,   # stricter threshold during detour
-    'patient_max_dist': 2.0,      # stop if patient farther than this
+    'patient_max_dist': 0.85,      # stop if patient farther than this Original: 2.0
     'patient_min_dist': 0.5,      # stop if patient closer than this
-    'patient_close_dist': 1.5,    # normal range upper bound
-    'max_speed': 0.25,            # normal forward speed
-    'min_speed': 0.10,            # slow speed when patient borderline
+    'patient_close_dist': 0.6,    # normal range upper bound Original: 1.5
+    'max_speed': 0.3,            # normal forward speed Original: 0.25
+    'min_speed': 0.25,            # slow speed when patient borderline Original: 0.1
     'catchup_speed': 0.25,        # disabled (same as max) — direction unreliable
     'max_rotation': 0.7,          # max angular velocity for turns
     'walk_distance': 2.13,        # target path length
 }
 
 # Rolling average window for UWB distance smoothing
-UWB_SMOOTH_WINDOW = 5
+UWB_SMOOTH_WINDOW = 3
 
 
 class PatientWalk(Node):
@@ -92,6 +94,8 @@ class PatientWalk(Node):
 
         # --- UWB state ---
         self.patient_distance = None  # smoothed triangulated distance
+        self.a1_angle = -1.0
+        self.a2_angle = -1.0
         self.uwb_raw_buffer = deque(maxlen=UWB_SMOOTH_WINDOW)
         self.uwb_update_count = 0     # count for rate tracking
         self.uwb_rate_time = time.time()
@@ -125,6 +129,8 @@ class PatientWalk(Node):
         self.webrtc_pub = self.create_publisher(WebRtcReq, '/webrtc_req', 10)
         self.walk_status_pub = self.create_publisher(String, '/snoopi/walk_status', 10)
 
+        self.lidar_cb_group = ReentrantCallbackGroup()
+
         # --- Subscribers ---
         lidar_qos = QoSProfile(
             history=HistoryPolicy.KEEP_LAST,
@@ -132,7 +138,7 @@ class PatientWalk(Node):
             reliability=ReliabilityPolicy.BEST_EFFORT,
             durability=DurabilityPolicy.VOLATILE,
         )
-        self.create_subscription(PointCloud2, '/point_cloud2', self._pointcloud_callback, lidar_qos)
+        self.create_subscription(PointCloud2, '/point_cloud2', self._pointcloud_callback, lidar_qos, callback_group=self.lidar_cb_group)
         self.create_subscription(Odometry, '/odom', self._odom_callback, 10)
         self.create_subscription(String, '/snoopi/uwb_status', self._uwb_callback, 10)
         self.create_subscription(Bool, '/snoopi/estop', self._estop_callback, 10)
@@ -171,10 +177,22 @@ class PatientWalk(Node):
         try:
             data = json.loads(msg.data)
             dist = data.get('triangulated_distance_m', -1)
+            # anc_1_len = data.get('anchor_1_distance_m', -1)
+            # anc_2_len = data.get('anchor_2_distance_m', -1)
+            # anc_dist = 0.3
+
             if dist > 0:
                 self.uwb_raw_buffer.append(dist)
                 # Rolling average for smoothing
                 self.patient_distance = sum(self.uwb_raw_buffer) / len(self.uwb_raw_buffer)
+                # self.uwb_raw_buffer.append(anc_1_len)
+                # anc_1_len = sum(self.uwb_raw_buffer) / len(self.uwb_raw_buffer)
+                # self.uwb_raw_buffer.append(anc_2_len)
+                # anc_2_len = sum(self.uwb_raw_buffer) / len(self.uwb_raw_buffer)
+            
+            # if dist < self.params['patient_max_dist']:
+            #     self.a1_angle = math.acos((anc_1_len ** 2 + anc_dist ** 2 - anc_2_len ** 2) / (2 * (anc_1_len * anc_dist)))
+            #     self.a2_angle = math.acos((anc_2_len ** 2 + anc_dist ** 2 - anc_1_len ** 2) / (2 * (anc_2_len * anc_dist)))
 
             # Track UWB update rate
             self.uwb_update_count += 1
@@ -232,7 +250,7 @@ class PatientWalk(Node):
         exactly why obstacle detection might not be working.
         """
         self.pc_recv_count += 1
-
+        #print(self.pc_recv_count)
         # Log frame_id on first receipt
         if not self.pc_frame_id:
             self.pc_frame_id = msg.header.frame_id
@@ -430,6 +448,8 @@ class PatientWalk(Node):
           0 ── patient_min_dist ── patient_close_dist ── patient_max_dist ──→
            STOP      max_speed           min_speed            STOP (FAR)
         """
+        # back_angle = (3 * math.pi) / 4
+
         if self.patient_distance is None:
             # No UWB data — walk at max_speed (patient might not have tag on yet)
             return self.params['max_speed']
@@ -550,15 +570,20 @@ class PatientWalk(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = PatientWalk()
+    executor = MultiThreadedExecutor()
+    executor.add_node(node)
     try:
-        rclpy.spin(node)
+        executor.spin()
     except KeyboardInterrupt:
         node.get_logger().info('Keyboard interrupt — stopping')
         node._send_velocity(0.0, 0.0)
     finally:
+        executor.shutdown()
         node.destroy_node()
-        if rclpy.ok():
-            rclpy.shutdown()
+        rclpy.shutdown()
+        # node.destroy_node()
+        # if rclpy.ok():
+        #     rclpy.shutdown()
 
 
 if __name__ == '__main__':

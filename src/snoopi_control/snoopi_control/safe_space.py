@@ -59,7 +59,8 @@ class ObstacleDetection(Node):
         global state
         self.obstacle_detected_left = False
         self.obstacle_detected_right = False
-
+        
+        print(self.lidar.min_dist)
         if self.lidar.min_dist < OBSTACLE_DIST:
             print(self.lidar.min_dist)
             if self.lidar.y < 0.12 and self.lidar.y >= 0:
