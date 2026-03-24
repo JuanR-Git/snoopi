@@ -301,7 +301,6 @@ class Go2Mover(Node):
                     self.distance_walked = 0.0
                     self.path_heading = self.current_yaw
                     self.locked_angle = None
-                    self.uwb_raw_buffer.clear()
                     if self.distance_walked >= self.params['walk_distance']:
                         state = COMPLETED
 
