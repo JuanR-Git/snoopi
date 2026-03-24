@@ -18,6 +18,7 @@ setup(
 	    'following = snoopi_control.following:main',
             'patient_walk = snoopi_control.patient_walk:main',
             'basic_mover = snoopi_control.basic_mover:main',
+            'snoopi_fixed = snoopi_control.snoopi_fixed:main',
         ],
     },
 )
