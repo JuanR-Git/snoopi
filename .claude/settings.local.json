@@ -11,7 +11,12 @@
       "WebFetch(domain:marketing.unitree.com)",
       "WebFetch(domain:docs.westonrobot.com)",
       "WebFetch(domain:static.generation-robots.com)",
-      "WebFetch(domain:ric.engineering)"
+      "WebFetch(domain:ric.engineering)",
+      "Bash(ls -1 src/snoopi_control/snoopi_control/*.py)",
+      "Bash(ls -1 src/snoopi_command_bridge/snoopi_command_bridge/*.py)",
+      "Bash(ls -1 src/snoopi_mock/snoopi_mock/*.py)",
+      "Bash(ls -1 src/snoopi_system_monitor/snoopi_system_monitor/*.py)",
+      "Bash(ls -1 src/snoopi_uwb/snoopi_uwb/*.py)"
     ]
   }
 }
