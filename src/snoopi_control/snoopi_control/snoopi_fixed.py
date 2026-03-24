@@ -66,12 +66,12 @@ class UserInterface(Node):
         try:
             data = json.loads(msg.data)
             task_type = data.get('type', '').lower()
-            if task_type == 'walk' and self.state == IDLE:
+            if task_type == 'walk' and state == IDLE:
                 # Optionally override walk distance from task
                 dist = data.get('distance_m')
                 if dist is not None and float(dist) > 0:
                     self.params['walk_distance'] = float(dist)
-                self._start_walk()
+                state = WALKING
         except (json.JSONDecodeError, ValueError, TypeError) as e:
             self.get_logger().warn(f'Invalid task_command: {e}')
 
@@ -296,6 +296,12 @@ class Go2Mover(Node):
                     state = PATIENT_FAR
                 else:
                     msg.linear.x = speed
+                    self.start_x = self.odom_x
+                    self.start_y = self.odom_y
+                    self.distance_walked = 0.0
+                    self.path_heading = self.current_yaw
+                    self.locked_angle = None
+                    self.uwb_raw_buffer.clear()
                     if self.distance_walked >= self.params['walk_distance']:
                         state = COMPLETED
 
