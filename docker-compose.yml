@@ -1,0 +1,35 @@
+services:
+  snoopi-ros2:
+    build: .
+    image: snoopi-ros2:latest
+    container_name: snoopi-ros2
+    # host networking: container shares the Pi's network stack directly.
+    # Required for CycloneDDS multicast discovery to work.
+    network_mode: host
+    # unless-stopped: restart on reboot/crash, but NOT after manual docker stop
+    restart: unless-stopped
+    environment:
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+      - CYCLONEDDS_URI=/ros2_ws/cyclonedds.xml
+      # ┌─────────────────────────────────────────────────────────┐
+      # │  FILL IN BEFORE LAB: Set to the Go2 Air's IP address   │
+      # │  Expected: 192.168.123.161 (verify with arp -a)        │
+      # └─────────────────────────────────────────────────────────┘
+      - ROBOT_IP=192.168.123.161
+    # privileged: gives access to ALL host devices (/dev/ttyUSB*, etc.)
+    # Needed because UWB anchors may not be plugged in at container start —
+    # explicit 'devices:' entries would block startup if missing.
+    privileged: true
+    volumes:
+      # Your ROS2 node source code — edit on host, build inside container
+      - ./src:/ros2_ws/src
+      # DDS config — edit without rebuilding the image
+      - ./docker/cyclonedds.xml:/ros2_ws/cyclonedds.xml:ro
+      # Host /sys for system_monitor (RPi5 temp, fan status) — read-only
+      - /sys:/sys:ro
+    # Override Dockerfile CMD — entrypoint handles lifecycle (auto-launches services + tails logs)
+    command: []
+    # Keep stdin/tty open so docker exec works cleanly
+    stdin_open: true
+    tty: true

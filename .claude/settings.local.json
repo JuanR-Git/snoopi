@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:forum.mybotshop.de)",
+      "WebFetch(domain:wiki.theroboverse.com)",
+      "WebFetch(domain:www.manualslib.com)",
+      "WebFetch(domain:support.unitree.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:manuals.plus)",
+      "WebFetch(domain:marketing.unitree.com)",
+      "WebFetch(domain:docs.westonrobot.com)",
+      "WebFetch(domain:static.generation-robots.com)",
+      "WebFetch(domain:ric.engineering)"
+    ]
+  }
+}

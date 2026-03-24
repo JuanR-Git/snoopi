@@ -7,7 +7,7 @@
 
 A custom autonomous robot dog application for a hospital setting, built on the Unitree Go2 Air platform. The system allows operators (nurses at a station) to issue high-level task commands (e.g., "walk patient 200 meters") via a web-based dashboard. The robot executes tasks autonomously using onboard sensors, motor control, and real-time reactive logic. The dashboard provides task management, live health monitoring, and camera feeds.
 
-**MVP Demo Date:** March 5, 2026
+**MVP Demo Date:** March 12, 2026
 **Team:** Multiple humans and AI agents working in parallel
 
 ---
@@ -405,24 +405,26 @@ Since there is no physical e-stop button, the software e-stop must be robust and
 
 ---
 
-### Milestone 6 — UI Foundation (Days 10–14, parallel track)
+### Milestone 6 — UI Foundation (Days 10–14, parallel track) ✅ Completed Mar 5, 2026
 > **Goal:** A browser-based dashboard showing live health stats with basic command buttons.
 
-> ⚡ **This milestone can be developed in parallel with Milestone 5** by a different team member or agent, since it only requires rosbridge + the health topics from Milestone 2.
+> ⚡ **This milestone was developed in parallel** with Milestone 2, since it only requires rosbridge + mock data.
 
-**Tasks:**
-- [ ] Scaffold FastAPI backend:
-  - WebSocket endpoint proxying to rosbridge
-  - REST endpoints for task dispatch and status
-  - Backend holds no ROS2 state — it's a passthrough to rosbridge (single source of truth is ROS2)
-- [ ] Scaffold React frontend:
-  - Health dashboard panel: battery %, temperature, joint status, connection status
-  - Command buttons: sit, stand, emergency stop
-  - Task dispatch panel (placeholder for Milestone 7)
-- [ ] Launch rosbridge_suite: `ros2 launch rosbridge_server rosbridge_websocket_launch.xml`
-- [ ] Connect React frontend to rosbridge via WebSocket (`roslibjs`)
-- [ ] Display live health data updating in real-time
-- [ ] Wire sit/stand/e-stop buttons to ROS2 commands via rosbridge
+**What was built:**
+- [x] FastAPI backend with JWT auth (3 users), REST endpoints for health, tasks, e-stop — 13 pytest tests passing
+- [x] React 19 + TypeScript + Tailwind CSS v4 + Recharts frontend
+- [x] Login page with JWT authentication (token persisted in localStorage)
+- [x] Dashboard: health cards (robot + system), telemetry graphs, controls, alerts, task history
+- [x] Grafana-style telemetry graphs with nice-number Y-axis scaling and sliding clock-aligned X-axis
+- [x] rosbridge hook (`useRosbridge`) for real-time ROS2 data via WebSocket
+- [x] System monitor ROS2 node for Pi metrics (CPU, RAM, disk, temp)
+- [x] Full stack accessible from Windows browser at `http://192.168.0.41:5173`
+
+**Key design decisions:**
+- React connects directly to rosbridge (`ws://rpi5:9090`) for real-time telemetry — FastAPI handles HTTP only (tasks, auth, e-stop)
+- Telemetry graphs use numeric X-axis with `Date.now()` timestamps for smooth sliding (not Recharts category mode)
+- Y-axis uses nice-number rounding (snaps to 1/2/2.5/5/10 intervals) so labels stay stable during small oscillations
+- Time range selector (5m/15m/30m/1h/3h) with clock-aligned tick intervals
 
 **📚 ROS2 Learning Points:**
 - How rosbridge_suite works (translates ROS2 topics/services to JSON over WebSocket)
@@ -520,7 +522,7 @@ Since there is no physical e-stop button, the software e-stop must be robust and
 
 ---
 
-## 9. MVP Definition (March 5, 2026)
+## 9. MVP Definition (March 12, 2026)
 
 ### Must Have (Demo Blockers)
 - [x] Live health monitoring dashboard (battery, temperature, status)
@@ -582,7 +584,8 @@ Days 20-24: [All]        Milestone 9 — Integration & Demo Prep
 | Go2 Air LiDAR data not accessible via SDK | Low | Critical | LiDAR hardware confirmed present (super-wide-angle 3D LiDAR). Validate data access in Milestone 2. Fallback: external USB LiDAR on RPi4. |
 | Hospital WiFi blocks DDS multicast | Medium | Medium | Configure CycloneDDS with unicast peer list. Test in Milestone 3. |
 | Nav2 tuning takes longer than expected | Medium | Medium | Start with conservative parameters. Tuning is iterative — basic functionality should work with defaults. |
-| March 5th deadline is tight | High | High | Strict MVP scope. UI can be simplified. Demo in controlled corridor is acceptable. |
+| March 12th deadline is tight | High | High | Strict MVP scope. UI can be simplified. Demo in controlled corridor is acceptable. |
+| Phantom npm dependencies — packages imported but not in `package.json` | Occurred | Medium | `recharts`, `tailwindcss`, `@tailwindcss/vite` were all used but unlisted. Worked until `npm install` reshuffled `node_modules`. **Lesson:** Always verify every import has a corresponding `package.json` entry. |
 
 ---
 

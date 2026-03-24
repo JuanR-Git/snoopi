@@ -1,0 +1,178 @@
+SNOOPI System Communication Diagram
+=====================================
+
+Generate a clean, professional communication/architecture diagram from this description.
+Use boxes for components, arrows for data flow, and label every connection with protocol + port/topic.
+Group components by where they physically run (Windows, RPi5 host, Docker container, Robot, UWB hardware).
+
+== PHYSICAL LAYERS ==
+
+Layer 1: Windows Dev Machine (browser only in production)
+Layer 2: Raspberry Pi 5 (192.168.0.41) — host OS: Ubuntu Server 24.04
+Layer 3: Docker Container "snoopi-ros2" — runs on RPi5 with --network=host (shares Pi's network stack)
+Layer 4: Unitree Go2 Air Robot (192.168.123.161) — connected via Ethernet to RPi5
+Layer 5: UWB Hardware — 2 USB anchors plugged into RPi5, 1 patient-worn tag (wireless, not connected to Pi)
+
+== COMPONENTS ==
+
+[Windows Browser]
+  - React 19 + TypeScript + Tailwind CSS frontend
+  - Rendered in browser, served from RPi5
+
+[FastAPI Backend] — runs on RPi5 host, port 8000
+  - JWT authentication (3 users: john, juan, mihir)
+  - Endpoints: POST /auth/login, GET /auth/me, GET /health, POST /tasks, GET /tasks/{id}, POST /estop
+
+[Vite Dev Server] — runs on RPi5 host, port 5173
+  - Serves React frontend files to Windows browser
+
+[rosbridge_server] — runs inside Docker container, WebSocket port 9090
+  - Bridges ROS2 DDS topics to/from WebSocket for web clients
+
+[system_monitor node] — runs inside Docker container
+  - Reads RPi5 CPU, temp, fan from /sys (volume-mounted)
+  - Reads robot connection status from /ros2_ws/logs/robot_status.json
+  - Publishes to ROS2 topic: /snoopi/system_stats (JSON string, every 2s)
+
+[uwb_reader node] — runs inside Docker container
+  - Reads serial from /dev/ttyUSB0 (Anchor 1) and /dev/ttyUSB1 (Anchor 2) at 115200 baud
+  - Parses "distance[cm]=NNN" from each anchor's serial output
+  - Triangulates patient position when both anchors have valid readings
+  - Publishes to ROS2 topic: /snoopi/uwb_status (JSON string, every 0.5s)
+
+[command_bridge node] — runs inside Docker container
+  - Subscribes to ROS2 topic: /snoopi/command (receives dashboard commands)
+  - Publishes to ROS2 topic: /cmd_vel_out (Twist velocity commands to robot)
+  - Handles: estop (zero velocity), sit, stand
+
+[go2_driver_node] — runs inside Docker container, managed by watchdog
+  - Connects to Go2 Air robot via WebRTC at ROBOT_IP
+  - Publishes robot telemetry (battery, IMU, joints, LiDAR, etc.)
+  - Subscribes to /cmd_vel_out for velocity commands
+  - Watchdog pings robot every 10s, auto-starts/restarts driver
+
+[following node] — runs inside Docker container (on demand, not auto-started)
+  - Subscribes to /point_cloud2 (LiDAR data for obstacle detection)
+  - Subscribes to /snoopi/uwb_status (patient distance for following behavior)
+  - Subscribes to /odom (odometry for yaw tracking)
+  - Publishes to /cmd_vel_out (movement commands)
+
+[Go2 Air Robot] — physical robot, IP 192.168.123.161
+  - Sensors: 3D LiDAR, IMU, foot force, ultrasonic, front camera
+  - Actuators: 12 joint motors (quadruped)
+
+[UWB Anchor 1] — USB device /dev/ttyUSB0, mounted on robot
+[UWB Anchor 2] — USB device /dev/ttyUSB1, mounted on robot
+[UWB Patient Tag] — worn by patient, wireless (not connected to Pi)
+
+== CONNECTIONS (label each arrow) ==
+
+Windows Browser --HTTP GET--> Vite Dev Server (port 5173)
+  Purpose: Load React app
+
+Windows Browser --HTTP POST/GET--> FastAPI Backend (port 8000)
+  Purpose: Login (JWT), dispatch tasks, trigger e-stop, check health
+
+Windows Browser --WebSocket--> rosbridge_server (ws://192.168.0.41:9090)
+  Purpose: Subscribe to real-time ROS2 topics (system stats, UWB status, robot telemetry)
+
+FastAPI Backend --WebSocket--> rosbridge_server (ws://localhost:9090)
+  Purpose: Publish task commands and e-stop to ROS2 topics
+
+rosbridge_server <--ROS2 DDS--> system_monitor node
+  Topic: /snoopi/system_stats (String/JSON, every 2s)
+  Direction: system_monitor publishes → rosbridge forwards to browser
+
+rosbridge_server <--ROS2 DDS--> uwb_reader node
+  Topic: /snoopi/uwb_status (String/JSON, every 0.5s)
+  Direction: uwb_reader publishes → rosbridge forwards to browser
+
+rosbridge_server --ROS2 DDS--> command_bridge node
+  Topic: /snoopi/command (String)
+  Direction: rosbridge receives from FastAPI → command_bridge subscribes
+
+command_bridge node --ROS2 DDS--> go2_driver_node
+  Topic: /cmd_vel_out (Twist)
+  Direction: command_bridge publishes velocity → driver sends to robot
+
+go2_driver_node --WebRTC over Ethernet--> Go2 Air Robot (192.168.123.161)
+  Direction: Bidirectional
+  Outbound: velocity commands
+  Inbound: battery, IMU, joints, LiDAR point clouds, odometry
+
+system_monitor node --file read--> /sys (volume-mounted from RPi5 host)
+  Purpose: CPU temp, fan status
+  Protocol: Filesystem read (read-only)
+
+system_monitor node --file read--> /ros2_ws/logs/robot_status.json
+  Purpose: Robot connection state (written by watchdog)
+
+uwb_reader node --serial 115200 baud--> /dev/ttyUSB0 (UWB Anchor 1)
+  Direction: Read serial data
+  Data format: "distance[cm]=NNN"
+
+uwb_reader node --serial 115200 baud--> /dev/ttyUSB1 (UWB Anchor 2)
+  Direction: Read serial data
+  Data format: "distance[cm]=NNN"
+
+UWB Anchor 1 --UWB radio--> UWB Patient Tag
+  Direction: Bidirectional ranging (measures distance)
+  Protocol: UWB (Ultra-Wideband radio)
+
+UWB Anchor 2 --UWB radio--> UWB Patient Tag
+  Direction: Bidirectional ranging (measures distance)
+  Protocol: UWB (Ultra-Wideband radio)
+
+following node --ROS2 DDS subscribe--> /snoopi/uwb_status
+  Purpose: Get triangulated patient distance for follow behavior
+
+following node --ROS2 DDS subscribe--> /point_cloud2
+  Purpose: LiDAR data for obstacle avoidance
+
+following node --ROS2 DDS subscribe--> /odom
+  Purpose: Robot odometry for yaw tracking during turns
+
+following node --ROS2 DDS publish--> /cmd_vel_out
+  Purpose: Movement commands (forward, turn, stop)
+
+== ROS2 TOPIC MAP ==
+
+| Topic                    | Type              | Publisher        | Subscriber(s)              | Rate    |
+|--------------------------|-------------------|------------------|----------------------------|---------|
+| /snoopi/system_stats     | std_msgs/String   | system_monitor   | rosbridge → browser        | 2.0s    |
+| /snoopi/uwb_status       | std_msgs/String   | uwb_reader       | rosbridge → browser,       | 0.5s    |
+|                          |                   |                  | following node             |         |
+| /snoopi/command          | std_msgs/String   | rosbridge (API)  | command_bridge             | on-demand |
+| /snoopi/estop            | std_msgs/Bool     | rosbridge (API)  | command_bridge             | on-demand |
+| /snoopi/task_command     | std_msgs/String   | rosbridge (API)  | (future nav handler)       | on-demand |
+| /cmd_vel_out             | geometry/Twist    | command_bridge,  | go2_driver_node            | on-demand |
+|                          |                   | following node   |                            |         |
+| /point_cloud2            | PointCloud2       | go2_driver_node  | following node (LiDAR)     | ~10Hz   |
+| /odom                    | nav_msgs/Odometry | go2_driver_node  | following node (yaw)       | ~50Hz   |
+
+== DATA FLOW EXAMPLES ==
+
+Example 1 — E-Stop from Dashboard:
+  Browser → POST /estop → FastAPI → ws://localhost:9090 → rosbridge → /snoopi/command → command_bridge → /cmd_vel_out (zero) → go2_driver_node → Robot stops
+
+Example 2 — UWB Distance Display:
+  Patient Tag ~~UWB radio~~> Anchor 1 → serial → /dev/ttyUSB0 → uwb_reader → /snoopi/uwb_status → rosbridge → ws://browser → React SystemHealthCard shows "Anchor 1 Tag: 1.42 m"
+
+Example 3 — Patient Following:
+  uwb_reader → /snoopi/uwb_status → following node reads distance
+  go2_driver_node → /point_cloud2 → following node checks obstacles
+  following node decides state (FORWARD/STOPPED/TURNING) → /cmd_vel_out → go2_driver_node → Robot moves
+
+== PORT SUMMARY ==
+
+| Port  | Protocol  | Component        | Where           |
+|-------|-----------|------------------|-----------------|
+| 5173  | HTTP      | Vite dev server  | RPi5 host       |
+| 8000  | HTTP      | FastAPI backend  | RPi5 host       |
+| 9090  | WebSocket | rosbridge_server | Docker (host net)|
+
+== NETWORK INTERFACES ==
+
+RPi5 eth0 (or similar): 192.168.0.41 — LAN, Windows browser connects here
+RPi5 ethernet to robot: 192.168.123.x subnet — direct Ethernet to Go2 Air
+Docker --network=host: shares all RPi5 interfaces (required for DDS multicast)
