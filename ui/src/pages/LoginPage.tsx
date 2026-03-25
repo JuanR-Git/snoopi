@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { API } from '../config'
+import snoopLogo from '../assets/snoopi-logo.svg'
 
 interface LoginPageProps {
   onLogin: (token: string, user: { username: string; display_name: string }) => void
@@ -36,11 +37,11 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center">
+      <img src={snoopLogo} alt="Snoopi Lab" className="w-72 mb-6" />
       <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-teal-600">Snoopi</h1>
-          <p className="text-slate-500 mt-1">Hospital Robot Monitor</p>
+          <p className="text-slate-500">Hospital Robot Monitor</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
