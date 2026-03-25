@@ -63,6 +63,7 @@ class UserInterface(Node):
             self.get_logger().warn(f'Invalid params message: {e}')
 
     def _task_callback(self, msg):
+        global state
         try:
             data = json.loads(msg.data)
             task_type = data.get('type', '').lower()
@@ -196,6 +197,8 @@ class Go2Mover(Node):
     def __init__(self, lidar, follower, obs, params):
         super().__init__('go2_mover')
         self.lidar = lidar
+        self.sat = False
+        self.walk_started = False
         self.follower = follower
         self.obs = obs
         self.params = params
@@ -237,10 +240,13 @@ class Go2Mover(Node):
         self.webrtc_pub.publish(msg)
 
     def _estop_callback(self, msg):
-        if msg.data and self.state != E_STOPPED:
+        global state
+        msg = Twist()
+        if msg.data and state != E_STOPPED:
             self.get_logger().fatal('E-STOP triggered — sitting down')
-            self.state = E_STOPPED
-            self._send_velocity(0.0, 0.0)
+            state = E_STOPPED
+            msg.linear.x = 0.0
+            msg.angular.z = 0.0
             self._send_sit()
 
     def move(self):
@@ -250,9 +256,10 @@ class Go2Mover(Node):
             now = time.time()
             
             # Simple control loop logic
-            new_locked = self.obs.detect_obstacle(self.current_yaw)
-            if new_locked is not None:
-                self.locked_angle = new_locked
+            if state in (WALKING, PATIENT_FAR, OBSTACLE_DETOUR, RETURNING_TO_PATH):
+                new_locked = self.obs.detect_obstacle(self.current_yaw)
+                if new_locked is not None:
+                    self.locked_angle = new_locked
 
             dist = self.follower.patient_distance
             if dist is None:
@@ -280,8 +287,9 @@ class Go2Mover(Node):
                 msg.angular.z = 0.0
 
                 time.sleep(5) ###ensure some time befoire sitting
-
-                self._send_sit()
+                if self.sat == False:
+                    self._send_sit()
+                    self.sat = True
 
             elif state == PATIENT_FAR:
                 if speed > 0:
@@ -292,15 +300,16 @@ class Go2Mover(Node):
                     msg.angular.z = 0.0
 
             elif state == WALKING:
+                if not self.walk_started:
+                    self.start_x = self.odom_x
+                    self.start_y = self.odom_y
+                    self.path_heading = self.current_yaw
+                    self.distance_walked = 0.0
+                    self.walk_started = True
                 if speed is None:
                     state = PATIENT_FAR
                 else:
                     msg.linear.x = speed
-                    self.start_x = self.odom_x
-                    self.start_y = self.odom_y
-                    self.distance_walked = 0.0
-                    self.path_heading = self.current_yaw
-                    self.locked_angle = None
                     if self.distance_walked >= self.params['walk_distance']:
                         state = COMPLETED
 
