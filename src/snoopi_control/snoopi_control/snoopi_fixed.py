@@ -241,12 +241,11 @@ class Go2Mover(Node):
 
     def _estop_callback(self, msg):
         global state
-        msg = Twist()
         if msg.data and state != E_STOPPED:
             self.get_logger().fatal('E-STOP triggered — sitting down')
             state = E_STOPPED
-            msg.linear.x = 0.0
-            msg.angular.z = 0.0
+            stop_msg = Twist()
+            self.publisher_.publish(stop_msg)
             self._send_sit()
 
     def move(self):
@@ -285,18 +284,16 @@ class Go2Mover(Node):
             elif state == E_STOPPED:
                 msg.linear.x = 0.0
                 msg.angular.z = 0.0
-
-                time.sleep(5) ###ensure some time befoire sitting
-                if self.sat == False:
+                if not self.sat:
                     self._send_sit()
                     self.sat = True
 
             elif state == PATIENT_FAR:
-                if speed > 0:
-                    msg.linear.x = 0.0
-                    msg.angular.z = 0.0
+                if speed is not None and speed > 0:
+                    state = WALKING
+                    msg.linear.x = speed
                 else:
-                    msg.linear.x = self.params['max_speed']
+                    msg.linear.x = 0.0
                     msg.angular.z = 0.0
 
             elif state == WALKING:
@@ -312,6 +309,7 @@ class Go2Mover(Node):
                     msg.linear.x = speed
                     if self.distance_walked >= self.params['walk_distance']:
                         state = COMPLETED
+                        self.walk_started = False
 
             elif state == OBSTACLE_DETOUR:
                 if self.locked_angle is not None:
