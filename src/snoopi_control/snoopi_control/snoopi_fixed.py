@@ -108,7 +108,7 @@ class Following(Node):
 class LidarViewer(Node):
     def __init__(self):
         super().__init__('closest_point_checker')
-        self.lidar_min_dist = 100.0
+        self.lidar_min_dist = 1.0
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
         self.pc_recv_count = 0
@@ -150,20 +150,29 @@ class LidarViewer(Node):
 
         for x, y, z in pc2.read_points(cloud, field_names=('x', 'y', 'z'), skip_nans=True):
             if x <= 0: continue
-            forward_points += 1
-            if z <= -0.25 or z >= 0.25: continue
+            forward_points += 1 ###seems unneceassry
+            
+            if z <= -0.1 or z >= 0.1: continue  ###larger bounds here
+            
+            is_in_vision = (-1.0 <= y <= 1.0)
+            if not is_in_vision: continue
+
+            ###in-vision for y does not exist here
             angle = math.atan2(y, x)
-            if angle < angle_min or angle > angle_max: continue
+            angle_cur = math.atan2(y, x)
+            if angle < angle_min or angle > angle_max: continue  ###no target angle vs current angle relation
             
             dist = math.sqrt(x*x + y*y + z*z) - 0.32
             bin_index = min(max(int((angle - angle_min) / bin_width), 0), bins - 1)
             bin_amount[bin_index] += 1.0 / max(dist, 0.1)
 
-            if -0.16 <= y <= 0.12 and dist < min_dist:
-                min_dist = dist
-                path_points += 1
+            ###doesnt have closest and furthest point lines
 
-        self.lidar_min_dist = min_dist
+            if dist < self.lidar_min_dist:
+                self.lidar_min_dist = dist
+                closest_point = (x, y, z)
+                self.x = closest_point[0]
+                self.y = closest_point[1]
         self.pc_total_points = forward_points
         self.pc_path_points = path_points
         self.pc_processed_count += 1
@@ -173,6 +182,8 @@ class LidarViewer(Node):
         best_idx = min(candidates, key=lambda idx: abs(idx - (bins // 2)))
         self.best_safe_angle = angle_min + (best_idx + 0.5) * bin_width
         self.lidar_str = f'{self.lidar_min_dist:.2f}m({self.pc_path_points}pts)' if self.lidar_min_dist < 50 else "clear"
+
+        ### no current time if condition
 
 class ObstacleAvoidance(Node):
     def __init__(self, lidar, follower, params):
@@ -254,6 +265,7 @@ class Go2Mover(Node):
             time.sleep(0.05)
             now = time.time()
             
+
             # Simple control loop logic
             if state in (WALKING, PATIENT_FAR, OBSTACLE_DETOUR, RETURNING_TO_PATH):
                 new_locked = self.obs.detect_obstacle(self.current_yaw)
@@ -312,10 +324,27 @@ class Go2Mover(Node):
                         self.walk_started = False
 
             elif state == OBSTACLE_DETOUR:
+                self.angle_match = True
+                target_angle = self.obs.lidar.best_safe_angle
+                msg.linear.x = 0.0
+                self.publisher_.publish(msg)
+
+                if self.locked_angle is None:
+                    self.locked_angle = self.current_yaw + target_angle
+
                 if self.locked_angle is not None:
                     error = (self.locked_angle - self.current_yaw + math.pi) % (2 * math.pi) - math.pi
                     if abs(error) < 0.15:
+                        msg.angular.z = 0.0
+                        self.publisher_.publish(msg) #Immediate
                         msg.linear.x = self.params['min_speed']
+                        if self.params['obstacle_dist'] < self.obs.lidar.lidar_min_dist:
+                            self.get_logger().info("Clear! Moving Forward.")
+                            self.locked_angle = None
+                            state = RETURNING_TO_PATH
+                        else:
+                            self.locked_angle = None
+                            state = OBSTACLE_DETOUR
                     else:
                         msg.angular.z = max(-self.params['max_rotation'], min(self.params['max_rotation'], error * 1.5))
 

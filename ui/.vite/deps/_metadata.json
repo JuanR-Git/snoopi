@@ -2,7 +2,63 @@
   "hash": "7cd64611",
   "configHash": "81b95d71",
   "lockfileHash": "1a77e871",
-  "browserHash": "c3db276d",
-  "optimized": {},
-  "chunks": {}
+  "browserHash": "402a192c",
+  "optimized": {
+    "react/jsx-dev-runtime": {
+      "src": "../../node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "d4110e52",
+      "needsInterop": true
+    },
+    "react": {
+      "src": "../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "59d26ba3",
+      "needsInterop": true
+    },
+    "react-dom/client": {
+      "src": "../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "dfc2817f",
+      "needsInterop": true
+    },
+    "roslib": {
+      "src": "../../node_modules/roslib/dist/RosLib.js",
+      "file": "roslib.js",
+      "fileHash": "de712ce4",
+      "needsInterop": false
+    },
+    "recharts": {
+      "src": "../../node_modules/recharts/es6/index.js",
+      "file": "recharts.js",
+      "fileHash": "55b4aece",
+      "needsInterop": false
+    }
+  },
+  "chunks": {
+    "chunk-AU2MKR2E": {
+      "file": "chunk-AU2MKR2E.js"
+    },
+    "chunk-VX2H6PUQ": {
+      "file": "chunk-VX2H6PUQ.js"
+    },
+    "NativeWebSocketTransport-CF_ebnyS-ORE5XMHA": {
+      "file": "NativeWebSocketTransport-CF_ebnyS-ORE5XMHA.js"
+    },
+    "browser-2IAOWEST": {
+      "file": "browser-2IAOWEST.js"
+    },
+    "WsWebSocketTransport-6-v9C0gj-Z5EBZPXU": {
+      "file": "WsWebSocketTransport-6-v9C0gj-Z5EBZPXU.js"
+    },
+    "chunk-PODZOYNC": {
+      "file": "chunk-PODZOYNC.js"
+    },
+    "chunk-NRZZBZRG": {
+      "file": "chunk-NRZZBZRG.js"
+    },
+    "chunk-G3PMV62Z": {
+      "file": "chunk-G3PMV62Z.js"
+    }
+  }
 }
