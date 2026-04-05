@@ -141,7 +141,7 @@ class LidarViewer(Node):
             return
 
         cloud = do_transform_cloud(msg, transform)
-        min_dist = float('inf')
+        self.lidar_min_dist = float('inf')
         bins = 21
         angle_min, angle_max = -math.radians(45), math.radians(45)
         bin_amount = [0.0001] * bins
@@ -194,16 +194,10 @@ class ObstacleAvoidance(Node):
         self.params = params
         self.cli = self.create_client(SetParameters, '/go2_driver_node/set_parameters')
 
-    def detect_obstacle(self, current_yaw):
+    def detect_obstacle(self):
         global state
-        if self.lidar.lidar_min_dist > self.params['obstacle_dist']:
-            if state == OBSTACLE_DETOUR:
-                state = RETURNING_TO_PATH
-            return None
-        else:
+        if self.lidar.lidar_min_dist < self.params['obstacle_dist']:
             state = OBSTACLE_DETOUR
-            target = current_yaw + self.lidar.best_safe_angle
-            return math.atan2(math.sin(target), math.cos(target))
 
 class Go2Mover(Node):
     def __init__(self, lidar, follower, obs, params):
@@ -268,10 +262,8 @@ class Go2Mover(Node):
             
 
             # Simple control loop logic
-            if state in (WALKING, PATIENT_FAR, OBSTACLE_DETOUR, RETURNING_TO_PATH):
-                new_locked = self.obs.detect_obstacle(self.current_yaw)
-                if new_locked is not None:
-                    self.locked_angle = new_locked
+            if state in (WALKING, PATIENT_FAR):
+                self.obs.detect_obstacle()
 
             dist = self.follower.patient_distance
             if dist is None:
@@ -325,59 +317,35 @@ class Go2Mover(Node):
                         self.walk_started = False
 
             elif state == OBSTACLE_DETOUR:
-                self.angle_match = True
-                target_angle = self.obs.lidar.best_safe_angle
                 msg.linear.x = 0.0
-                self.publisher_.publish(msg)
 
                 if self.locked_angle is None:
+                    target_angle = self.lidar.best_safe_angle
                     self.locked_angle = self.current_yaw + target_angle
-                
+
                 error = self.locked_angle - self.current_yaw
                 error = (error + math.pi) % (2 * math.pi) - math.pi
-                print("current error term: ", error)
-                print("current yaw value: ", self.current_yaw)
+
                 if abs(error) < 0.15:
                     msg.angular.z = 0.0
                     self.publisher_.publish(msg)
-                    print("Min Distance: ", self.obs.lidar.min_dist)
-                    if OBSTACLE_DIST_SAFE < self.obs.lidar.min_dist:
+                    if self.params['obstacle_dist_safe'] < self.lidar.lidar_min_dist:
                         self.get_logger().info("Clear! Moving Forward.")
                         self.locked_angle = None
                         state = WALKING_DETOUR
                     else:
                         self.locked_angle = None
-                        state = STOPPED
+                        state = RETURNING_TO_PATH
                 else:
                     msg.angular.z = error * 1.5
-                    
-
-                # if self.locked_angle is not None:
-                #     error = (self.locked_angle - self.current_yaw + math.pi) % (2 * math.pi) - math.pi
-                #     if abs(error) < 0.15:
-                #         msg.angular.z = 0.0
-                #         self.publisher_.publish(msg) #Immediate
-                #         msg.linear.x = self.params['min_speed']
-                #         if self.params['obstacle_dist'] < self.obs.lidar.lidar_min_dist:
-                #             self.get_logger().info("Clear! Moving Forward.")
-                #             self.locked_angle = None
-                #             state = WALKING_DETOUR
-                #         else:
-                #             self.locked_angle = None
-                #             state = RETURNING_TO_PATH
-                #     else:
-                #         msg.angular.z = max(-self.params['max_rotation'], min(self.params['max_rotation'], error * 1.5))
 
             elif state == WALKING_DETOUR:
                 self.locked_angle = None
                 msg.linear.x = 0.325
-                self.publisher_.publish(msg)
-                time.sleep(1)
-                msg.linear.x = 0.0
-                self.publisher_.publish(msg)
-
-                if self.obs.lidar.min_dist > OBSTACLE_DIST_SAFE:
-                    #msg.linear.x = 0.0
+                if self.lidar.lidar_min_dist <= self.params['obstacle_dist_safe']:
+                    msg.linear.x = 0.0
+                    state = RETURNING_TO_PATH
+                elif self.lidar.lidar_min_dist > self.params['obstacle_dist']:
                     state = RETURNING_TO_PATH
 
             elif state == RETURNING_TO_PATH:

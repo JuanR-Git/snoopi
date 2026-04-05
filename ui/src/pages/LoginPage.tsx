@@ -41,6 +41,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       <img src={snoopLogo} alt="Snoopi Lab" className="w-72 mb-6" />
       <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm">
         <div className="text-center mb-8">
+          <p className="text-slate-500"> <b>S.N.O.O.P.I</b></p>
           <p className="text-slate-500">Hospital Robot Monitor</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
