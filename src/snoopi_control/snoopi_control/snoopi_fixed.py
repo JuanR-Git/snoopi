@@ -24,6 +24,7 @@ WALKING = 'WALKING'
 PATIENT_FAR = 'PATIENT_FAR'
 OBSTACLE_DETOUR = 'OBSTACLE_DETOUR'
 RETURNING_TO_PATH = 'RETURNING_TO_PATH'
+WALKING_DETOUR = 'WALKING_DETOUR'
 COMPLETED = 'COMPLETED'
 E_STOPPED = 'E_STOPPED'
 
@@ -31,8 +32,8 @@ state = IDLE
 
 # --- Shared Configuration ---
 DEFAULT_PARAMS = {
-    'obstacle_dist': 0.40,        # LiDAR trigger distance
-    'obstacle_dist_safe': 0.30,   # stricter threshold during detour
+    'obstacle_dist': 0.75,        # LiDAR trigger distance
+    'obstacle_dist_safe': 0.50,   # stricter threshold during detour
     'patient_max_dist': 2.0,      # stop if patient farther than this
     'patient_min_dist': 0.5,      # stop if patient closer than this
     'patient_close_dist': 1.5,    # normal range upper bound
@@ -331,22 +332,53 @@ class Go2Mover(Node):
 
                 if self.locked_angle is None:
                     self.locked_angle = self.current_yaw + target_angle
-
-                if self.locked_angle is not None:
-                    error = (self.locked_angle - self.current_yaw + math.pi) % (2 * math.pi) - math.pi
-                    if abs(error) < 0.15:
-                        msg.angular.z = 0.0
-                        self.publisher_.publish(msg) #Immediate
-                        msg.linear.x = self.params['min_speed']
-                        if self.params['obstacle_dist'] < self.obs.lidar.lidar_min_dist:
-                            self.get_logger().info("Clear! Moving Forward.")
-                            self.locked_angle = None
-                            state = RETURNING_TO_PATH
-                        else:
-                            self.locked_angle = None
-                            state = OBSTACLE_DETOUR
+                
+                error = self.locked_angle - self.current_yaw
+                error = (error + math.pi) % (2 * math.pi) - math.pi
+                print("current error term: ", error)
+                print("current yaw value: ", self.current_yaw)
+                if abs(error) < 0.15:
+                    msg.angular.z = 0.0
+                    self.publisher_.publish(msg)
+                    print("Min Distance: ", self.obs.lidar.min_dist)
+                    if OBSTACLE_DIST_SAFE < self.obs.lidar.min_dist:
+                        self.get_logger().info("Clear! Moving Forward.")
+                        self.locked_angle = None
+                        state = WALKING_DETOUR
                     else:
-                        msg.angular.z = max(-self.params['max_rotation'], min(self.params['max_rotation'], error * 1.5))
+                        self.locked_angle = None
+                        state = STOPPED
+                else:
+                    msg.angular.z = error * 1.5
+                    
+
+                # if self.locked_angle is not None:
+                #     error = (self.locked_angle - self.current_yaw + math.pi) % (2 * math.pi) - math.pi
+                #     if abs(error) < 0.15:
+                #         msg.angular.z = 0.0
+                #         self.publisher_.publish(msg) #Immediate
+                #         msg.linear.x = self.params['min_speed']
+                #         if self.params['obstacle_dist'] < self.obs.lidar.lidar_min_dist:
+                #             self.get_logger().info("Clear! Moving Forward.")
+                #             self.locked_angle = None
+                #             state = WALKING_DETOUR
+                #         else:
+                #             self.locked_angle = None
+                #             state = RETURNING_TO_PATH
+                #     else:
+                #         msg.angular.z = max(-self.params['max_rotation'], min(self.params['max_rotation'], error * 1.5))
+
+            elif state == WALKING_DETOUR:
+                self.locked_angle = None
+                msg.linear.x = 0.325
+                self.publisher_.publish(msg)
+                time.sleep(1)
+                msg.linear.x = 0.0
+                self.publisher_.publish(msg)
+
+                if self.obs.lidar.min_dist > OBSTACLE_DIST_SAFE:
+                    #msg.linear.x = 0.0
+                    state = RETURNING_TO_PATH
 
             elif state == RETURNING_TO_PATH:
                 error = (self.path_heading - self.current_yaw + math.pi) % (2 * math.pi) - math.pi
