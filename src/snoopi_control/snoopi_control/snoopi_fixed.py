@@ -183,7 +183,6 @@ class LidarViewer(Node):
         best_idx = min(candidates, key=lambda idx: abs(idx - (bins // 2)))
         self.best_safe_angle = angle_min + (best_idx + 0.5) * bin_width
         self.lidar_str = f'{self.lidar_min_dist:.2f}m({self.pc_path_points}pts)' if self.lidar_min_dist < 50 else "clear"
-
         ### no current time if condition
 
 class ObstacleAvoidance(Node):
@@ -331,7 +330,7 @@ class Go2Mover(Node):
                     self.publisher_.publish(msg)
                     if self.params['obstacle_dist_safe'] < self.lidar.lidar_min_dist:
                         self.get_logger().info("Clear! Moving Forward.")
-                        self.locked_angle = None
+                        #self.locked_angle = None
                         state = WALKING_DETOUR
                     else:
                         self.locked_angle = None
@@ -340,13 +339,35 @@ class Go2Mover(Node):
                     msg.angular.z = error * 1.5
 
             elif state == WALKING_DETOUR:
-                self.locked_angle = None
+                #self.locked_angle = None
                 msg.linear.x = 0.325
+                if not hasattr(self, 'detour_start_time') or self.detour_start_time is None:
+                    self.detour_start_time = time.time()
+                    # Return or continue to the next loop tick to ensure 
+                    # detour_start_time is now a float for the next run.
+                    self.publisher_.publish(msg)
+                    continue 
+                
+                # 2. Now it is safe to calculate elapsed time
+                elapsed = time.time() - self.detour_start_time
+                
+                # 3. Check for new obstacles while detouring
                 if self.lidar.lidar_min_dist <= self.params['obstacle_dist_safe']:
                     msg.linear.x = 0.0
+                    self.detour_start_time = None
+                    state = OBSTACLE_DETOUR
+                
+                # 4. If 2 seconds have passed, we are clear to return
+                elif elapsed > 2.0: 
+                    self.get_logger().info("Detour phase complete. Returning to path.")
+                    self.detour_start_time = None
+                    self.locked_angle = None
                     state = RETURNING_TO_PATH
-                elif self.lidar.lidar_min_dist > self.params['obstacle_dist']:
-                    state = RETURNING_TO_PATH
+                # if self.lidar.lidar_min_dist <= self.params['obstacle_dist_safe']:
+                #     msg.linear.x = 0.0
+                #     state = RETURNING_TO_PATH
+                # elif self.lidar.lidar_min_dist > self.params['obstacle_dist']:
+                #     state = RETURNING_TO_PATH
 
             elif state == RETURNING_TO_PATH:
                 error = (self.path_heading - self.current_yaw + math.pi) % (2 * math.pi) - math.pi
